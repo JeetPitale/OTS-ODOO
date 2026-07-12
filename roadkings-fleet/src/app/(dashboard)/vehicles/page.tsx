@@ -7,13 +7,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Truck, Plus, Filter, Download, CheckCircle, X } from "lucide-react";
-import { getVehicles, addVehicle, updateVehicle, deleteVehicle, getDrivers, type Vehicle, type Driver } from "@/lib/storage";
+import { useVehicles, useCreateVehicle, useUpdateVehicle, useDeleteVehicle } from "@/hooks/useVehicles";
+import { useDrivers } from "@/hooks/useDrivers";
 
 export default function VehiclesPage() {
-  const [vehiclesList, setVehiclesList] = useState<Vehicle[]>([]);
-  const [driversList, setDriversList] = useState<Driver[]>([]);
+  const { data: vehiclesData, isLoading } = useVehicles({ limit: 100 });
+  const { data: driversData } = useDrivers({ limit: 100 });
+  
+  const createVehicle = useCreateVehicle();
+  const updateVehicle = useUpdateVehicle();
+  const deleteVehicle = useDeleteVehicle();
+
+  const vehiclesList = vehiclesData?.items || [];
+  const driversList = driversData?.items || [];
+
   const [isOpen, setIsOpen] = useState(false);
-  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+  const [editingVehicle, setEditingVehicle] = useState<any>(null);
 
   const [formData, setFormData] = useState({
     number: "",
@@ -28,34 +37,12 @@ export default function VehiclesPage() {
     capacityKg: 16000,
   });
 
-  const [totals, setTotals] = useState({
-    total: 0,
-    onTrip: 0,
-    available: 0,
-    maintenance: 0,
-  });
-
-  const refreshList = () => {
-    const list = getVehicles();
-    setVehiclesList(list);
-
-    const total = list.length;
-    const onTrip = list.filter((v) => v.status === "on-trip").length;
-    const available = list.filter((v) => v.status === "available").length;
-    const maintenance = list.filter((v) => v.status === "in-maintenance" || v.status === "in-shop").length;
-
-    setTotals({
-      total,
-      onTrip,
-      available,
-      maintenance,
-    });
+  const totals = {
+    total: vehiclesList.length,
+    onTrip: vehiclesList.filter((v) => (v.status as any) === "on_trip" || (v.status as any) === "on-trip").length,
+    available: vehiclesList.filter((v) => (v.status as any) === "available").length,
+    maintenance: vehiclesList.filter((v) => (v.status as any) === "in_maintenance" || (v.status as any) === "in-maintenance" || (v.status as any) === "in_shop" || (v.status as any) === "in-shop").length,
   };
-
-  useEffect(() => {
-    refreshList();
-    setDriversList(getDrivers());
-  }, []);
 
   const handleOpenAdd = () => {
     setEditingVehicle(null);
@@ -74,7 +61,7 @@ export default function VehiclesPage() {
     setIsOpen(true);
   };
 
-  const handleOpenEdit = (v: Vehicle) => {
+  const handleOpenEdit = (v: any) => {
     setEditingVehicle(v);
     setFormData({
       number: v.number,
@@ -91,21 +78,20 @@ export default function VehiclesPage() {
     setIsOpen(true);
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingVehicle) {
-      updateVehicle({
-        ...editingVehicle,
-        ...formData,
+      await updateVehicle.mutateAsync({
+        id: editingVehicle.id,
+        data: formData,
       });
     } else {
-      addVehicle(formData);
+      await createVehicle.mutateAsync(formData);
     }
     setIsOpen(false);
-    refreshList();
   };
 
-  const columns: ColumnDef<Vehicle>[] = [
+  const columns: ColumnDef<any>[] = [
     { header: "Vehicle No.", accessorKey: "number", sortable: true },
     { header: "Type", accessorKey: "type", sortable: true },
     { header: "Make / Model", accessorKey: "make" },
@@ -113,7 +99,7 @@ export default function VehiclesPage() {
     {
       header: "Status",
       accessorKey: "status",
-      cell: (row) => <StatusBadge variant={row.status} />,
+      cell: (row) => <StatusBadge variant={row.status.replace("_", "-") as any} />,
     },
     { header: "Assigned Driver", accessorKey: "driver" },
     { header: "Mileage", accessorKey: "mileage", sortable: true },
@@ -135,10 +121,9 @@ export default function VehiclesPage() {
             variant="ghost"
             size="sm"
             className="h-7 text-xs rounded-lg text-red-500 hover:text-red-700 hover:bg-red-50 px-2"
-            onClick={() => {
+            onClick={async () => {
               if (confirm(`Are you sure you want to delete vehicle ${row.number}?`)) {
-                deleteVehicle(row.id);
-                refreshList();
+                await deleteVehicle.mutateAsync(row.id);
               }
             }}
           >

@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Users, ShieldCheck, AlertTriangle, Plus, Filter, Download, Star, X } from "lucide-react";
-import { getDrivers, addDriver, updateDriver, deleteDriver, getVehicles, type Driver, type Vehicle } from "@/lib/storage";
+import { useDrivers, useCreateDriver, useUpdateDriver, useDeleteDriver } from "@/hooks/useDrivers";
+import { useVehicles } from "@/hooks/useVehicles";
 
 function SafetyScoreCell({ score }: { score: number }) {
   const color =
@@ -25,10 +26,18 @@ function SafetyScoreCell({ score }: { score: number }) {
 }
 
 export default function DriversPage() {
-  const [driversList, setDriversList] = useState<Driver[]>([]);
-  const [vehiclesList, setVehiclesList] = useState<Vehicle[]>([]);
+  const { data: driversData, isLoading } = useDrivers({ limit: 100 });
+  const { data: vehiclesData } = useVehicles({ limit: 100 });
+  
+  const createDriver = useCreateDriver();
+  const updateDriver = useUpdateDriver();
+  const deleteDriver = useDeleteDriver();
+
+  const driversList = driversData?.items || [];
+  const vehiclesList = vehiclesData?.items || [];
+
   const [isOpen, setIsOpen] = useState(false);
-  const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
+  const [editingDriver, setEditingDriver] = useState<any>(null);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -44,34 +53,12 @@ export default function DriversPage() {
     photoUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200",
   });
 
-  const [totals, setTotals] = useState({
-    total: 0,
-    avgSafety: "0.0",
-    incidents: 0,
-    onTrip: 0,
-  });
-
-  const refreshList = () => {
-    const list = getDrivers();
-    setDriversList(list);
-
-    const total = list.length;
-    const avgSafety = (list.reduce((acc, d) => acc + d.safetyScore, 0) / (total || 1)).toFixed(1);
-    const incidents = list.reduce((acc, d) => acc + d.incidents, 0);
-    const onTrip = list.filter((d) => d.status === "on-trip").length;
-
-    setTotals({
-      total,
-      avgSafety,
-      incidents,
-      onTrip,
-    });
+  const totals = {
+    total: driversList.length,
+    avgSafety: (driversList.reduce((acc, d) => acc + d.safetyScore, 0) / (driversList.length || 1)).toFixed(1),
+    incidents: driversList.reduce((acc, d) => acc + d.incidents, 0),
+    onTrip: driversList.filter((d) => d.status === "on_trip").length,
   };
-
-  useEffect(() => {
-    refreshList();
-    setVehiclesList(getVehicles());
-  }, []);
 
   const handleOpenAdd = () => {
     setEditingDriver(null);
@@ -91,7 +78,7 @@ export default function DriversPage() {
     setIsOpen(true);
   };
 
-  const handleOpenEdit = (d: Driver) => {
+  const handleOpenEdit = (d: any) => {
     setEditingDriver(d);
     setFormData({
       name: d.name,
@@ -109,28 +96,27 @@ export default function DriversPage() {
     setIsOpen(true);
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingDriver) {
-      updateDriver({
-        ...editingDriver,
-        ...formData,
+      await updateDriver.mutateAsync({
+        id: editingDriver.id,
+        data: formData,
       });
     } else {
-      addDriver(formData);
+      await createDriver.mutateAsync(formData);
     }
     setIsOpen(false);
-    refreshList();
   };
 
-  const columns: ColumnDef<Driver>[] = [
+  const columns: ColumnDef<any>[] = [
     {
       header: "Driver ID",
       accessorKey: "id",
       sortable: true,
       cell: (row) => (
         <Link href={`/drivers/${row.id}`} className="text-primary font-semibold hover:underline">
-          {row.id}
+          {row.driverId || row.id}
         </Link>
       ),
     },
@@ -140,7 +126,7 @@ export default function DriversPage() {
     {
       header: "Status",
       accessorKey: "status",
-      cell: (row) => <StatusBadge variant={row.status} />,
+      cell: (row) => <StatusBadge variant={row.status.replace("_", "-") as any} />,
     },
     {
       header: "Safety Score",
@@ -173,10 +159,9 @@ export default function DriversPage() {
             variant="ghost"
             size="sm"
             className="h-7 text-[10px] rounded-lg text-red-500 hover:text-red-700 hover:bg-red-50 px-1.5"
-            onClick={() => {
+            onClick={async () => {
               if (confirm(`Are you sure you want to delete driver ${row.name}?`)) {
-                deleteDriver(row.id);
-                refreshList();
+                await deleteDriver.mutateAsync(row.id);
               }
             }}
           >

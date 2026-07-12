@@ -9,23 +9,16 @@ export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<any[]>([]);
 
   useEffect(() => {
-    const list = localStorage.getItem("dispatchNotifications");
-    if (list) {
-      setNotifications(JSON.parse(list));
-    } else {
-      const initial = [
-        { id: "1", title: "New Dispatch Request", message: "Trip request TRP-1025 awaiting QR code generation.", time: "5 min ago", type: "info" },
-        { id: "2", title: "Driver Checked-In", message: "Amit Singh successfully verified via QR code.", time: "18 min ago", type: "success" },
-        { id: "3", title: "Delay Alert", message: "Vikas Meena reported heavy traffic on Pune highway.", time: "1h ago", type: "warning" },
-      ];
-      setNotifications(initial);
-      localStorage.setItem("dispatchNotifications", JSON.stringify(initial));
-    }
+    const initial = [
+      { id: "1", title: "New Dispatch Request", message: "Trip request TRP-1025 awaiting QR code generation.", time: "5 min ago", type: "info" },
+      { id: "2", title: "Driver Checked-In", message: "Amit Singh successfully verified via QR code.", time: "18 min ago", type: "success" },
+      { id: "3", title: "Delay Alert", message: "Vikas Meena reported heavy traffic on Pune highway.", time: "1h ago", type: "warning" },
+    ];
+    setNotifications(initial);
   }, []);
 
   const clearAll = () => {
     setNotifications([]);
-    localStorage.setItem("dispatchNotifications", JSON.stringify([]));
   };
 
   return (

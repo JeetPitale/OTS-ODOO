@@ -9,43 +9,29 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CheckCircle, Download, Eye, FileSpreadsheet, History, Printer, Search, XCircle } from "lucide-react";
-import {
-  cancelTrip,
-  completeTrip,
-  createDispatchQRPayload,
-  getDispatchHistory,
-  getDispatchQR,
-  type DispatchRecord,
-} from "@/lib/storage";
+import { useDispatches, useCompleteDispatch, useCancelDispatch } from "@/hooks/useDispatches";
 
 const PAGE_SIZE = 8;
 
 export default function DispatchHistoryPage() {
-  const [history, setHistory] = useState<DispatchRecord[]>([]);
+  const { data: dispatchesData, isLoading } = useDispatches({ limit: 100 });
+  const completeDispatch = useCompleteDispatch();
+  const cancelDispatch = useCancelDispatch();
+
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
-  const [completeRecord, setCompleteRecord] = useState<DispatchRecord | null>(null);
-
-  const loadHistory = () => setHistory(getDispatchHistory());
-
-  useEffect(() => {
-    loadHistory();
-    const onStorage = (event: StorageEvent) => {
-      if (event.key === "dispatchHistory") loadHistory();
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
+  const [completeRecord, setCompleteRecord] = useState<any | null>(null);
 
   const filteredHistory = useMemo(() => {
+    const history = dispatchesData?.items || [];
     const term = searchTerm.toLowerCase();
     return history.filter((dispatch) => {
-      const matchesSearch = [dispatch.dispatchId, dispatch.driverName, dispatch.vehicleRegistration, dispatch.source, dispatch.destination]
-        .some((value) => value.toLowerCase().includes(term));
+      const matchesSearch = [dispatch.tripId, dispatch.driverName, dispatch.vehicleRegistration, dispatch.source, dispatch.destination]
+        .some((value) => value?.toLowerCase().includes(term));
       return matchesSearch && (statusFilter === "all" || dispatch.tripStatus === statusFilter);
     });
-  }, [history, searchTerm, statusFilter]);
+  }, [dispatchesData?.items, searchTerm, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredHistory.length / PAGE_SIZE));
   const pageItems = filteredHistory.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -60,27 +46,27 @@ export default function DispatchHistoryPage() {
     setPage(1);
   };
 
-  const getCanvas = (record: DispatchRecord) =>
-    document.getElementById(`history-qr-${record.dispatchId}`) as HTMLCanvasElement | null;
+  const getCanvas = (record: any) =>
+    document.getElementById(`history-qr-${record.id}`) as HTMLCanvasElement | null;
 
-  const downloadQR = (record: DispatchRecord) => {
+  const downloadQR = (record: any) => {
     const canvas = getCanvas(record);
     if (!canvas) return;
     const link = document.createElement("a");
-    link.download = `dispatch-${record.dispatchId}-qr.png`;
+    link.download = `dispatch-${record.tripId}-qr.png`;
     link.href = canvas.toDataURL("image/png");
     link.click();
   };
 
-  const printDispatch = (record: DispatchRecord) => {
+  const printDispatch = (record: any) => {
     const canvas = getCanvas(record);
     const printWindow = window.open("", "_blank", "width=560,height=700");
     if (!canvas || !printWindow) return;
     printWindow.document.write(`
-      <html><head><title>Dispatch ${record.dispatchId}</title></head>
+      <html><head><title>Dispatch ${record.tripId}</title></head>
       <body style="font-family:Arial,sans-serif;padding:36px;color:#1e293b">
         <h2 style="color:#f97316">RoadKings Dispatch Pass</h2>
-        <p><strong>Dispatch ID:</strong> ${record.dispatchId}</p>
+        <p><strong>Dispatch ID:</strong> ${record.tripId}</p>
         <p><strong>Driver:</strong> ${record.driverName}</p>
         <p><strong>Vehicle:</strong> ${record.vehicleRegistration}</p>
         <p><strong>Route:</strong> ${record.source} → ${record.destination}</p>
@@ -93,24 +79,24 @@ export default function DispatchHistoryPage() {
     printWindow.print();
   };
 
-  const handleComplete = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleComplete = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!completeRecord) return;
     const data = new FormData(event.currentTarget);
-    completeTrip(
-      completeRecord.dispatchId,
-      data.get("odometer") as string,
-      data.get("fuel") as string,
-      data.get("notes") as string
-    );
+    await completeDispatch.mutateAsync({
+      id: completeRecord.id,
+      data: {
+        odometer: data.get("odometer") as string,
+        fuel: data.get("fuel") as string,
+        notes: data.get("notes") as string
+      }
+    });
     setCompleteRecord(null);
-    loadHistory();
   };
 
-  const handleCancel = (record: DispatchRecord) => {
-    if (!window.confirm(`Cancel dispatch ${record.dispatchId}? The driver and vehicle will be restored to Available.`)) return;
-    cancelTrip(record.dispatchId);
-    loadHistory();
+  const handleCancel = async (record: any) => {
+    if (!window.confirm(`Cancel dispatch ${record.tripId}? The driver and vehicle will be restored to Available.`)) return;
+    await cancelDispatch.mutateAsync(record.id);
   };
 
   return (
@@ -151,17 +137,17 @@ export default function DispatchHistoryPage() {
                       <th className="pb-3 pt-1">Dispatch ID</th><th className="pb-3 pt-1">Driver</th><th className="pb-3 pt-1">Vehicle</th><th className="pb-3 pt-1">Source</th><th className="pb-3 pt-1">Destination</th><th className="pb-3 pt-1">Dispatch Time</th><th className="pb-3 pt-1">Status</th><th className="pb-3 pt-1 text-right">Actions</th>
                     </tr></thead>
                     <tbody className="divide-y divide-border">
-                      {pageItems.map((record) => {
-                        const qrPayload = getDispatchQR(record.dispatchId) || createDispatchQRPayload(record);
+                      {pageItems.map((record: any) => {
+                        const qrPayload = JSON.stringify({ dispatchId: record.tripId, driverId: record.driverId, vehicleReg: record.vehicleRegistration, timestamp: record.createdAt });
                         const active = record.tripStatus === "on-trip";
-                        return <tr key={record.dispatchId} className="text-sm hover:bg-slate-50/50">
-                          <td className="py-3.5 font-semibold text-slate-800">{record.dispatchId}<QRCodeCanvas id={`history-qr-${record.dispatchId}`} value={qrPayload} size={240} className="hidden" /></td>
+                        return <tr key={record.id} className="text-sm hover:bg-slate-50/50">
+                          <td className="py-3.5 font-semibold text-slate-800">{record.tripId}<QRCodeCanvas id={`history-qr-${record.id}`} value={qrPayload} size={240} className="hidden" /></td>
                           <td className="py-3.5 font-medium">{record.driverName}<span className="block text-xs text-muted-foreground">{record.driverId}</span></td>
                           <td className="py-3.5">{record.vehicleRegistration}</td><td className="py-3.5">{record.source}</td><td className="py-3.5">{record.destination}</td>
-                          <td className="py-3.5 text-xs text-muted-foreground">{record.dispatchDate}<br />{record.dispatchTime}</td>
-                          <td className="py-3.5"><StatusBadge variant={record.tripStatus} /></td>
+                          <td className="py-3.5 text-xs text-muted-foreground">{new Date(record.createdAt).toLocaleDateString()}<br />{new Date(record.createdAt).toLocaleTimeString()}</td>
+                          <td className="py-3.5"><StatusBadge variant={record.tripStatus.replace("_", "-") as any} /></td>
                           <td className="py-3.5 text-right whitespace-nowrap space-x-1">
-                            <Link href={`/verify-dispatch?id=${record.dispatchId}`} target="_blank"><Button size="sm" variant="outline" className="h-8 px-2 text-xs"><Eye className="h-3 w-3 mr-1" />View</Button></Link>
+                            <Link href={`/verify-dispatch?id=${record.tripId}`} target="_blank"><Button size="sm" variant="outline" className="h-8 px-2 text-xs"><Eye className="h-3 w-3 mr-1" />View</Button></Link>
                             <Button size="sm" variant="outline" onClick={() => downloadQR(record)} className="h-8 px-2 text-xs"><Download className="h-3 w-3" /></Button>
                             <Button size="sm" variant="outline" onClick={() => printDispatch(record)} className="h-8 px-2 text-xs"><Printer className="h-3 w-3" /></Button>
                             {active && <><Button size="sm" onClick={() => setCompleteRecord(record)} className="h-8 px-2 text-xs bg-emerald-600 hover:bg-emerald-700"><CheckCircle className="h-3 w-3 mr-1" />Complete</Button><Button size="sm" variant="outline" onClick={() => handleCancel(record)} className="h-8 px-2 text-xs text-red-600 hover:text-red-700"><XCircle className="h-3 w-3 mr-1" />Cancel</Button></>}

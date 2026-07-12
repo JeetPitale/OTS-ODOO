@@ -8,11 +8,15 @@ export default auth((req) => {
   const { nextUrl } = req;
   const isLoggedIn = !!req.auth;
 
+  const isApiRoute = nextUrl.pathname.startsWith("/api");
   const isApiAuthRoute = nextUrl.pathname.startsWith("/api/auth");
-  const isPublicRoute = nextUrl.pathname === "/login" || isApiAuthRoute;
+  const isPublicRoute = nextUrl.pathname === "/login" || isApiAuthRoute || nextUrl.pathname === "/verify-dispatch";
 
   // 1. Redirect unauthenticated users to login page
   if (!isLoggedIn && !isPublicRoute) {
+    if (isApiRoute) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     return NextResponse.redirect(new URL("/login", nextUrl));
   }
 
@@ -80,6 +84,6 @@ export const config = {
      * - favicon.ico (favicon file)
      * - public files (images, etc)
      */
-    "/((?!api/auth|_next/static|_next/image|favicon.ico|.*\\..*).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)",
   ],
 };

@@ -16,45 +16,37 @@ import {
   FileCode,
   Eye,
 } from "lucide-react";
-import {
-  createDriverQRPayload,
-  generateDriverQR,
-  getDispatchHistory,
-  getDriverQRs,
-  getDrivers,
-  type Driver,
-} from "@/lib/storage";
+// Import removed
+import { useDrivers } from "@/hooks/useDrivers";
+import { useDispatches } from "@/hooks/useDispatches";
+import { useDriverQRs, useGenerateDriverQR } from "@/hooks/useQR";
 
 export default function QrManagementPage() {
   const [activeTab, setActiveTab] = useState<"driver" | "dispatch">("driver");
   // Tab 1: Driver QR states
-  const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [driverQRs, setDriverQRs] = useState<Record<string, string>>({});
-  const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
+  const { data: driversData } = useDrivers({ limit: 100 });
+  const { data: qrsData } = useDriverQRs();
+  const generateQR = useGenerateDriverQR();
+  
+  const drivers = driversData?.items || [];
+  const driverQRs = qrsData || {};
+  
+  const [selectedDriver, setSelectedDriver] = useState<any | null>(null);
   const [driverSearch, setDriverSearch] = useState("");
 
   // Tab 2: Dispatch QR states
-  const [dispatches, setDispatches] = useState<any[]>([]);
+  const { data: dispatchesData } = useDispatches({ limit: 100 });
+  const dispatches = dispatchesData?.items || [];
+  
   const [selectedDispatch, setSelectedDispatch] = useState<any | null>(null);
   const [dispatchSearch, setDispatchSearch] = useState("");
 
-  // Load initial data
-  useEffect(() => {
-    const driversList = getDrivers();
-    const dispatchesList = getDispatchHistory();
-
-    setDrivers(driversList);
-    setDriverQRs(getDriverQRs());
-    setDispatches(dispatchesList);
-  }, []);
-
-  const handleGenerateQR = (driver: Driver) => {
-    generateDriverQR(driver);
-    setDriverQRs(getDriverQRs());
+  const handleGenerateQR = async (driver: any) => {
+    await generateQR.mutateAsync({ driverId: driver.id, driverName: driver.name });
     setSelectedDriver(driver);
   };
 
-  const downloadDriverQR = (driver: Driver) => {
+  const downloadDriverQR = (driver: any) => {
     const canvas = (document.getElementById(`driver-qr-download-${driver.id}`) || document.getElementById(`driver-qr-${driver.id}`)) as HTMLCanvasElement | null;
     if (!canvas) return;
 
@@ -64,7 +56,7 @@ export default function QrManagementPage() {
     link.click();
   };
 
-  const printDriverQR = (driver: Driver) => {
+  const printDriverQR = (driver: any) => {
     const canvas = (document.getElementById(`driver-qr-download-${driver.id}`) || document.getElementById(`driver-qr-${driver.id}`)) as HTMLCanvasElement | null;
     const printWindow = window.open("", "_blank", "width=500,height=650");
     if (!canvas || !printWindow) return;
@@ -96,10 +88,10 @@ export default function QrManagementPage() {
   );
 
   const filteredDispatches = dispatches.filter(
-    (d) =>
-      d.dispatchId.toLowerCase().includes(dispatchSearch.toLowerCase()) ||
-      d.driverName.toLowerCase().includes(dispatchSearch.toLowerCase()) ||
-      d.vehicleRegistration.toLowerCase().includes(dispatchSearch.toLowerCase())
+    (d: any) =>
+      (d.tripId && d.tripId.toLowerCase().includes(dispatchSearch.toLowerCase())) ||
+      (d.driverName && d.driverName.toLowerCase().includes(dispatchSearch.toLowerCase())) ||
+      (d.vehicleRegistration && d.vehicleRegistration.toLowerCase().includes(dispatchSearch.toLowerCase()))
   );
 
   return (
@@ -168,7 +160,7 @@ export default function QrManagementPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {filteredDrivers.map((drv) => {
+                      {filteredDrivers.map((drv: any) => {
                         const hasQR = !!driverQRs[drv.id];
                         return (
                           <tr key={drv.id} className="text-sm hover:bg-slate-50/50">
@@ -277,7 +269,7 @@ export default function QrManagementPage() {
                       <div className="w-40 h-40 bg-white border border-slate-200 rounded-xl p-3 my-4 flex items-center justify-center relative">
                         <QRCodeCanvas
                           id={`driver-qr-${selectedDriver.id}`}
-                          value={driverQRs[selectedDriver.id] || createDriverQRPayload(selectedDriver)}
+                          value={driverQRs[selectedDriver.id] || JSON.stringify({ type: "DRIVER", driverId: selectedDriver.id, name: selectedDriver.name })}
                           size={136}
                           level="M"
                           includeMargin
@@ -348,9 +340,9 @@ export default function QrManagementPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {filteredDispatches.map((disp) => (
-                        <tr key={disp.dispatchId} className="text-sm hover:bg-slate-50/50">
-                          <td className="py-3.5 font-semibold text-slate-800">{disp.dispatchId}</td>
+                      {filteredDispatches.map((disp: any) => (
+                        <tr key={disp.id} className="text-sm hover:bg-slate-50/50">
+                          <td className="py-3.5 font-semibold text-slate-800">{disp.tripId}</td>
                           <td className="py-3.5">
                             <div className="flex flex-col">
                               <span className="font-medium text-slate-800">{disp.driverName}</span>
@@ -361,10 +353,10 @@ export default function QrManagementPage() {
                             {disp.source} &rarr; {disp.destination}
                           </td>
                           <td className="py-3.5 text-xs text-muted-foreground">
-                            {disp.dispatchDate} <br /> {disp.dispatchTime}
+                            {new Date(disp.createdAt).toLocaleDateString()} <br /> {new Date(disp.createdAt).toLocaleTimeString()}
                           </td>
                           <td className="py-3.5">
-                            <StatusBadge variant={disp.tripStatus} />
+                            <StatusBadge variant={disp.tripStatus.replace("_", "-") as any} />
                           </td>
                           <td className="py-3.5 text-right">
                             <Button
@@ -397,7 +389,7 @@ export default function QrManagementPage() {
                       <div className="absolute top-0 inset-x-0 h-1.5 bg-orange-500" />
                       
                       <h3 className="font-bold text-sm text-slate-800 tracking-tight">ROADKINGS Challan</h3>
-                      <p className="text-[9px] text-orange-500 font-bold uppercase tracking-wider">{selectedDispatch.dispatchId}</p>
+                      <p className="text-[9px] text-orange-500 font-bold uppercase tracking-wider">{selectedDispatch.tripId}</p>
 
                       <div className="w-40 h-40 bg-white border border-slate-200 rounded-xl p-3 my-4 flex items-center justify-center relative">
                         <div className="w-full h-full bg-[radial-gradient(#000_15%,transparent_15%)] [background-size:8px_8px] opacity-75" />

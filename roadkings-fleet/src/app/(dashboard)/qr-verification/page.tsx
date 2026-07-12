@@ -5,20 +5,21 @@ import { Header } from "@/components/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScanLine, CheckCircle2, AlertTriangle, RefreshCw, QrCode } from "lucide-react";
-import { getDrivers, addScanLog, getScanLogs } from "@/lib/storage";
+import { useDrivers } from "@/hooks/useDrivers";
+import { useQRScanLogs, useLogQRScan } from "@/hooks/useQR";
 
 export default function QrVerificationPage() {
-  const [drivers, setDrivers] = useState<any[]>([]);
-  const [logs, setLogs] = useState<any[]>([]);
+  const { data: driversData } = useDrivers({ limit: 100 });
+  const { data: logsData } = useQRScanLogs();
+  const logScan = useLogQRScan();
+
+  const drivers = driversData?.items || [];
+  const logs = (logsData || []).slice(0, 10);
+  
   const [scannedResult, setScannedResult] = useState<any | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setDrivers(getDrivers());
-    setLogs(getScanLogs().slice(0, 10));
-  }, []);
-
-  const simulateScan = () => {
+  const simulateScan = async () => {
     setScanError(null);
     setScannedResult(null);
 
@@ -32,17 +33,14 @@ export default function QrVerificationPage() {
     if (isSuccess) {
       if (randomDriver.status === "suspended") {
         setScanError(`Driver ${randomDriver.name} is currently Suspended! Cannot dispatch.`);
-        addScanLog(randomDriver.id, randomDriver.name, false, "Scan failed: Driver status is suspended.");
+        await logScan.mutateAsync({ driverId: randomDriver.id, driverName: randomDriver.name, success: false, message: "Scan failed: Driver status is suspended." });
       } else {
         setScannedResult(randomDriver);
-        addScanLog(randomDriver.id, randomDriver.name, true, "Scan verified successfully.");
+        await logScan.mutateAsync({ driverId: randomDriver.id, driverName: randomDriver.name, success: true, message: "Scan verified successfully." });
       }
     } else {
       setScanError("Failed to decode QR code. Please position the code correctly and retry.");
     }
-
-    // Refresh logs
-    setLogs(getScanLogs().slice(0, 10));
   };
 
   return (
@@ -112,7 +110,7 @@ export default function QrVerificationPage() {
                 <p className="text-xs text-muted-foreground py-8 text-center">No scans recorded today.</p>
               ) : (
                 <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
-                  {logs.map((log) => (
+                  {logs.map((log: any) => (
                     <div key={log.id} className="p-2.5 rounded-lg border border-slate-100 bg-slate-50 flex flex-col gap-1">
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-xs text-slate-700 truncate">{log.driverName}</span>
