@@ -69,6 +69,9 @@ export interface DispatchRecord {
   estimatedRevenue: string;
   remarks?: string;
   arrivalTime?: string;
+  finalOdometer?: string;
+  fuelUsed?: string;
+  completionNotes?: string;
 }
 
 export interface ScanLog {
@@ -87,6 +90,32 @@ export interface AppNotification {
   timestamp: string;
   type: "info" | "warning" | "success" | "critical";
   read: boolean;
+}
+
+export interface MaintenanceRecord {
+  id: string;
+  vehicle: string;
+  type: string;
+  description: string;
+  status: StatusVariant;
+  priority: string;
+  scheduledDate: string;
+  completedDate: string;
+  cost: string;
+  technician: string;
+}
+
+export interface FuelRecord {
+  id: string;
+  vehicle: string;
+  date: string;
+  station: string;
+  fuelType: string;
+  quantity: string;
+  rate: string;
+  amount: string;
+  odometer: string;
+  driver: string;
 }
 
 const DEFAULT_DRIVERS: Driver[] = [
@@ -122,6 +151,25 @@ const DEFAULT_TRIPS: Trip[] = [
   { id: "TRP-1017", origin: "Chennai", destination: "Coimbatore", driver: "Suresh Reddy", vehicle: "KA-01 EF 9012", status: "cancelled", distance: "505 km", eta: "—", revenue: "₹0", startDate: "2025-01-04 05:00" },
 ];
 
+const DEFAULT_MAINTENANCE_RECORDS: MaintenanceRecord[] = [
+  { id: "MNT-401", vehicle: "MH-04 AB 1234", type: "Preventive", description: "Engine oil change & filter replacement", status: "scheduled", priority: "Medium", scheduledDate: "2025-01-15", completedDate: "—", cost: "₹4,200", technician: "Ram Auto Works" },
+  { id: "MNT-400", vehicle: "KA-01 EF 9012", type: "Corrective", description: "Brake pad replacement – front axle", status: "in-maintenance", priority: "High", scheduledDate: "2025-01-08", completedDate: "—", cost: "₹12,500", technician: "Fleet Service Hub" },
+  { id: "MNT-399", vehicle: "DL-01 CD 5678", type: "Preventive", description: "Tyre rotation and alignment check", status: "completed", priority: "Low", scheduledDate: "2025-01-05", completedDate: "2025-01-05", cost: "₹3,800", technician: "Tyre King Services" },
+  { id: "MNT-398", vehicle: "TS-09 GH 3456", type: "Corrective", description: "AC compressor repair", status: "completed", priority: "Medium", scheduledDate: "2025-01-03", completedDate: "2025-01-04", cost: "₹8,900", technician: "CoolTech Motors" },
+  { id: "MNT-397", vehicle: "MH-12 OP 5566", type: "Corrective", description: "Transmission overhaul – gearbox leak", status: "in-maintenance", priority: "Critical", scheduledDate: "2025-01-06", completedDate: "—", cost: "₹45,000", technician: "Precision Gears Pvt Ltd" },
+  { id: "MNT-396", vehicle: "WB-06 IJ 7890", type: "Preventive", description: "Annual fitness inspection (RTO)", status: "scheduled", priority: "High", scheduledDate: "2025-01-20", completedDate: "—", cost: "₹2,500", technician: "RTO Authorized Center" },
+  { id: "MNT-395", vehicle: "GJ-05 KL 1122", type: "Corrective", description: "Exhaust system welding & patch", status: "completed", priority: "Low", scheduledDate: "2024-12-28", completedDate: "2024-12-29", cost: "₹6,200", technician: "Shree Fabricators" },
+];
+
+const DEFAULT_FUEL_RECORDS: FuelRecord[] = [
+  { id: "FUL-2201", vehicle: "MH-04 AB 1234", date: "2025-01-08", station: "HP Petrol Pump, Thane", fuelType: "Diesel", quantity: "120 L", rate: "89.50", amount: "10740", odometer: "45230 km", driver: "Rajesh Kumar" },
+  { id: "FUL-2200", vehicle: "DL-01 CD 5678", date: "2025-01-07", station: "Indian Oil, Gurgaon", fuelType: "Diesel", quantity: "95 L", rate: "88.90", amount: "8446", odometer: "62100 km", driver: "Amit Singh" },
+  { id: "FUL-2199", vehicle: "KA-01 EF 9012", date: "2025-01-07", station: "BPCL, Whitefield", fuelType: "Diesel", quantity: "150 L", rate: "90.20", amount: "13530", odometer: "31400 km", driver: "Suresh Reddy" },
+  { id: "FUL-2198", vehicle: "TS-09 GH 3456", date: "2025-01-06", station: "HP, Secunderabad", fuelType: "Diesel", quantity: "110 L", rate: "89.80", amount: "9878", odometer: "78920 km", driver: "Mohan Rao" },
+  { id: "FUL-2197", vehicle: "WB-06 IJ 7890", date: "2025-01-06", station: "Indian Oil, Howrah", fuelType: "Diesel", quantity: "60 L", rate: "88.60", amount: "5316", odometer: "18750 km", driver: "Debashis Das" },
+  { id: "FUL-2196", vehicle: "RJ-14 MN 3344", date: "2025-01-05", station: "BPCL, Jaipur", fuelType: "Diesel", quantity: "140 L", rate: "89.40", amount: "12516", odometer: "52800 km", driver: "Vikas Meena" },
+];
+
 export function initializeStorage() {
   if (typeof window === "undefined") return;
 
@@ -137,21 +185,23 @@ export function initializeStorage() {
     localStorage.setItem("trips", JSON.stringify(DEFAULT_TRIPS));
   }
 
-  // Pre-generate Permanent Driver QRs
-  if (!localStorage.getItem("driverQRs")) {
-    const driversList = JSON.parse(localStorage.getItem("drivers") || "[]") as Driver[];
-    const qrs: Record<string, string> = {};
-    driversList.forEach((drv) => {
-      qrs[drv.id] = JSON.stringify({
-        driverId: drv.id,
-        driverName: drv.name,
-      });
-    });
-    localStorage.setItem("driverQRs", JSON.stringify(qrs));
+  if (!localStorage.getItem("maintenance")) {
+    localStorage.setItem("maintenance", JSON.stringify(DEFAULT_MAINTENANCE_RECORDS));
   }
+
+  if (!localStorage.getItem("fuel")) {
+    localStorage.setItem("fuel", JSON.stringify(DEFAULT_FUEL_RECORDS));
+  }
+
+
+  ensureDriverQRs();
 
   if (!localStorage.getItem("dispatchQRs")) {
     localStorage.setItem("dispatchQRs", JSON.stringify({}));
+  }
+
+  if (!localStorage.getItem("archivedDispatchQRs")) {
+    localStorage.setItem("archivedDispatchQRs", JSON.stringify({}));
   }
 
   if (!localStorage.getItem("dispatchHistory")) {
@@ -192,7 +242,42 @@ export function getTrips(): Trip[] {
 export function getDriverQRs(): Record<string, string> {
   initializeStorage();
   if (typeof window === "undefined") return {};
-  return JSON.parse(localStorage.getItem("driverQRs") || "{}");
+  return ensureDriverQRs();
+}
+
+/** A driver's permanent QR payload intentionally contains no data beyond identity. */
+export function createDriverQRPayload(driver: Pick<Driver, "id" | "name">): string {
+  return JSON.stringify({ driverId: driver.id, driverName: driver.name });
+}
+
+/**
+ * Keeps LocalStorage aligned with the driver directory: one permanent QR per
+ * current driver, no orphaned records, and no mutable metadata in the payload.
+ */
+export function ensureDriverQRs(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+
+  const drivers = JSON.parse(localStorage.getItem("drivers") || "[]") as Driver[];
+  const stored = JSON.parse(localStorage.getItem("driverQRs") || "{}") as Record<string, string>;
+  const qrs: Record<string, string> = {};
+
+  drivers.forEach((driver) => {
+    qrs[driver.id] = createDriverQRPayload(driver);
+  });
+
+  if (JSON.stringify(stored) !== JSON.stringify(qrs)) {
+    localStorage.setItem("driverQRs", JSON.stringify(qrs));
+  }
+
+  return qrs;
+}
+
+export function generateDriverQR(driver: Pick<Driver, "id" | "name">): string {
+  const qrs = getDriverQRs();
+  const payload = createDriverQRPayload(driver);
+  qrs[driver.id] = payload;
+  localStorage.setItem("driverQRs", JSON.stringify(qrs));
+  return payload;
 }
 
 export function getDispatchHistory(): DispatchRecord[] {
@@ -261,13 +346,49 @@ export function updateVehicleStatus(vehicleId: string, status: StatusVariant, dr
   }
 }
 
+/** The dispatch QR contains only the fields required to validate a dispatch. */
+export function createDispatchQRPayload(
+  record: Pick<DispatchRecord, "dispatchId" | "tripId" | "driverId" | "vehicleRegistration" | "source" | "destination" | "cargoWeight" | "dispatchTime">
+): string {
+  return JSON.stringify({
+    dispatchId: record.dispatchId,
+    tripId: record.tripId,
+    driverId: record.driverId,
+    vehicleRegistration: record.vehicleRegistration,
+    source: record.source,
+    destination: record.destination,
+    cargoWeight: record.cargoWeight,
+    dispatchTime: record.dispatchTime,
+  });
+}
+
 export function createDispatch(record: Omit<DispatchRecord, "dispatchId" | "dispatchDate" | "dispatchTime" | "tripStatus">): DispatchRecord {
   const history = getDispatchHistory();
   const trips = getTrips();
+  const driver = getDrivers().find((item) => item.id === record.driverId);
+  const vehicle = getVehicles().find((item) => item.id === record.vehicleId);
 
-  // Generate Dispatch ID e.g. RK-2026-000145
-  const dispatchNum = String(history.length + 145).padStart(6, "0");
-  const dispatchId = `RK-2026-${dispatchNum}`;
+  if (!driver) throw new Error("Driver no longer exists.");
+  if (driver.status === "suspended") throw new Error("Driver is suspended and cannot be dispatched.");
+  if (driver.status === "on-trip") throw new Error("Driver is already on a trip.");
+  if (driver.licenseExpiry && new Date(driver.licenseExpiry) < new Date()) {
+    throw new Error("Driver license has expired.");
+  }
+  if (!vehicle || vehicle.status !== "available") {
+    throw new Error("Selected vehicle is no longer available for dispatch.");
+  }
+
+  const cargoWeight = Number(record.cargoWeight);
+  const vehicleCapacity = vehicle.capacityKg || 12000;
+  if (!Number.isFinite(cargoWeight) || cargoWeight <= 0) {
+    throw new Error("Cargo weight must be greater than zero.");
+  }
+  if (cargoWeight > vehicleCapacity) {
+    throw new Error(`Cargo weight exceeds the selected vehicle capacity of ${vehicleCapacity} kg.`);
+  }
+
+  // Avoid collisions even if LocalStorage history is cleared between dispatches.
+  const dispatchId = `RK-${Date.now()}-${Math.floor(Math.random() * 1000000).toString().padStart(6, "0")}`;
   const now = new Date();
   
   const fullRecord: DispatchRecord = {
@@ -281,10 +402,11 @@ export function createDispatch(record: Omit<DispatchRecord, "dispatchId" | "disp
   history.unshift(fullRecord);
   localStorage.setItem("dispatchHistory", JSON.stringify(history));
 
-  // Store Dispatch QR Code payload
+  // Store the compact verification payload separately from the history record.
   const dispatchQRs = JSON.parse(localStorage.getItem("dispatchQRs") || "{}");
-  dispatchQRs[dispatchId] = JSON.stringify(fullRecord);
+  dispatchQRs[dispatchId] = createDispatchQRPayload(fullRecord);
   localStorage.setItem("dispatchQRs", JSON.stringify(dispatchQRs));
+  addNotification("QR Generated", `Dispatch QR generated for ${dispatchId}.`, "info");
 
   // Update statuses
   updateDriverStatus(record.driverId, "on-trip", record.vehicleRegistration);
@@ -336,6 +458,9 @@ export function completeTrip(dispatchId: string, odometer: string, fuel: string,
     const record = history[recordIndex];
     history[recordIndex].tripStatus = "completed";
     history[recordIndex].arrivalTime = new Date().toLocaleTimeString();
+    history[recordIndex].finalOdometer = odometer;
+    history[recordIndex].fuelUsed = fuel;
+    history[recordIndex].completionNotes = notes;
     localStorage.setItem("dispatchHistory", JSON.stringify(history));
 
     // Update driver & vehicle statuses back to available
@@ -360,7 +485,7 @@ export function completeTrip(dispatchId: string, odometer: string, fuel: string,
       localStorage.setItem("vehicles", JSON.stringify(vehicles));
     }
 
-    addNotification("Dispatch Completed", `Trip ${record.tripId} successfully completed by ${record.driverName}. Odometer: ${odometer} km.`, "success");
+    addNotification("Trip Completed", `Trip ${record.tripId} successfully completed by ${record.driverName}. Odometer: ${odometer} km.`, "success");
   }
 }
 
@@ -373,6 +498,8 @@ export function cancelTrip(dispatchId: string) {
     const record = history[recordIndex];
     history[recordIndex].tripStatus = "cancelled";
     localStorage.setItem("dispatchHistory", JSON.stringify(history));
+
+    archiveDispatchQR(dispatchId);
 
     // Restore driver and vehicle to available
     updateDriverStatus(record.driverId, "available", "Unassigned");
@@ -390,6 +517,22 @@ export function cancelTrip(dispatchId: string) {
   }
 }
 
+export function archiveDispatchQR(dispatchId: string) {
+  initializeStorage();
+  if (typeof window === "undefined") return;
+
+  const activeQrs = JSON.parse(localStorage.getItem("dispatchQRs") || "{}") as Record<string, string>;
+  const payload = activeQrs[dispatchId];
+  if (!payload) return;
+
+  const archivedQrs = JSON.parse(localStorage.getItem("archivedDispatchQRs") || "{}") as Record<string, { payload: string; archivedAt: string }>;
+  archivedQrs[dispatchId] = { payload, archivedAt: new Date().toISOString() };
+  delete activeQrs[dispatchId];
+  localStorage.setItem("archivedDispatchQRs", JSON.stringify(archivedQrs));
+  localStorage.setItem("dispatchQRs", JSON.stringify(activeQrs));
+  addNotification("Dispatch QR Archived", `Dispatch QR ${dispatchId} was archived after cancellation.`, "info");
+}
+
 export function getDispatchQR(dispatchId: string): string | null {
   if (typeof window === "undefined") return null;
   const dispatchQRs = JSON.parse(localStorage.getItem("dispatchQRs") || "{}");
@@ -397,7 +540,170 @@ export function getDispatchQR(dispatchId: string): string | null {
 }
 
 export function updateDriverQR(driverId: string, payload: string) {
+  const driver = getDrivers().find((item) => item.id === driverId);
+  if (driver) generateDriverQR(driver);
+}
+
+export function addDriver(driver: Omit<Driver, "id">): Driver {
+  const drivers = getDrivers();
+  const nextNum = Math.max(...drivers.map((d) => parseInt(d.id.replace("DRV-", "")) || 0), 0) + 1;
+  const newId = `DRV-${String(nextNum).padStart(3, "0")}`;
+  const fullDriver: Driver = {
+    ...driver,
+    id: newId,
+  };
+  drivers.push(fullDriver);
+  localStorage.setItem("drivers", JSON.stringify(drivers));
+
+  // Initialize QR for the driver
+  generateDriverQR(fullDriver);
+
+  return fullDriver;
+}
+
+export function updateDriver(driver: Driver) {
+  const drivers = getDrivers();
+  const index = drivers.findIndex((d) => d.id === driver.id);
+  if (index !== -1) {
+    drivers[index] = driver;
+    localStorage.setItem("drivers", JSON.stringify(drivers));
+    generateDriverQR(driver);
+  }
+}
+
+export function deleteDriver(id: string) {
+  const drivers = getDrivers();
+  const filtered = drivers.filter((d) => d.id !== id);
+  localStorage.setItem("drivers", JSON.stringify(filtered));
+
   const qrs = getDriverQRs();
-  qrs[driverId] = payload;
+  delete qrs[id];
   localStorage.setItem("driverQRs", JSON.stringify(qrs));
 }
+
+export function addVehicle(vehicle: Omit<Vehicle, "id">): Vehicle {
+  const vehicles = getVehicles();
+  const nextNum = Math.max(...vehicles.map((v) => parseInt(v.id.replace("V-", "")) || 0), 0) + 1;
+  const newId = `V-${String(nextNum).padStart(3, "0")}`;
+  const fullVehicle: Vehicle = {
+    ...vehicle,
+    id: newId,
+  };
+  vehicles.push(fullVehicle);
+  localStorage.setItem("vehicles", JSON.stringify(vehicles));
+  return fullVehicle;
+}
+
+export function updateVehicle(vehicle: Vehicle) {
+  const vehicles = getVehicles();
+  const index = vehicles.findIndex((v) => v.id === vehicle.id);
+  if (index !== -1) {
+    vehicles[index] = vehicle;
+    localStorage.setItem("vehicles", JSON.stringify(vehicles));
+  }
+}
+
+export function deleteVehicle(id: string) {
+  const vehicles = getVehicles();
+  const filtered = vehicles.filter((v) => v.id !== id);
+  localStorage.setItem("vehicles", JSON.stringify(filtered));
+}
+
+export function addTrip(trip: Omit<Trip, "id">): Trip {
+  const trips = getTrips();
+  const nextNum = Math.max(...trips.map((t) => parseInt(t.id.replace("TRP-", "")) || 0), 0) + 1;
+  const newId = `TRP-${nextNum}`;
+  const fullTrip: Trip = {
+    ...trip,
+    id: newId,
+  };
+  trips.unshift(fullTrip);
+  localStorage.setItem("trips", JSON.stringify(trips));
+  return fullTrip;
+}
+
+export function updateTrip(trip: Trip) {
+  const trips = getTrips();
+  const index = trips.findIndex((t) => t.id === trip.id);
+  if (index !== -1) {
+    trips[index] = trip;
+    localStorage.setItem("trips", JSON.stringify(trips));
+  }
+}
+
+export function deleteTrip(id: string) {
+  const trips = getTrips();
+  const filtered = trips.filter((t) => t.id !== id);
+  localStorage.setItem("trips", JSON.stringify(filtered));
+}
+
+export function getMaintenanceRecords(): MaintenanceRecord[] {
+  initializeStorage();
+  if (typeof window === "undefined") return DEFAULT_MAINTENANCE_RECORDS;
+  return JSON.parse(localStorage.getItem("maintenance") || "[]");
+}
+
+export function addMaintenanceRecord(record: Omit<MaintenanceRecord, "id">): MaintenanceRecord {
+  const records = getMaintenanceRecords();
+  const nextNum = Math.max(...records.map((r) => parseInt(r.id.replace("MNT-", "")) || 0), 0) + 1;
+  const newId = `MNT-${nextNum}`;
+  const fullRecord: MaintenanceRecord = {
+    ...record,
+    id: newId,
+  };
+  records.unshift(fullRecord);
+  localStorage.setItem("maintenance", JSON.stringify(records));
+  return fullRecord;
+}
+
+export function updateMaintenanceRecord(record: MaintenanceRecord) {
+  const records = getMaintenanceRecords();
+  const index = records.findIndex((r) => r.id === record.id);
+  if (index !== -1) {
+    records[index] = record;
+    localStorage.setItem("maintenance", JSON.stringify(records));
+  }
+}
+
+export function deleteMaintenanceRecord(id: string) {
+  const records = getMaintenanceRecords();
+  const filtered = records.filter((r) => r.id !== id);
+  localStorage.setItem("maintenance", JSON.stringify(filtered));
+}
+
+export function getFuelRecords(): FuelRecord[] {
+  initializeStorage();
+  if (typeof window === "undefined") return DEFAULT_FUEL_RECORDS;
+  return JSON.parse(localStorage.getItem("fuel") || "[]");
+}
+
+export function addFuelRecord(record: Omit<FuelRecord, "id">): FuelRecord {
+  const records = getFuelRecords();
+  const nextNum = Math.max(...records.map((r) => parseInt(r.id.replace("FUL-", "")) || 0), 0) + 1;
+  const newId = `FUL-${nextNum}`;
+  const fullRecord: FuelRecord = {
+    ...record,
+    id: newId,
+  };
+  records.unshift(fullRecord);
+  localStorage.setItem("fuel", JSON.stringify(records));
+  return fullRecord;
+}
+
+export function updateFuelRecord(record: FuelRecord) {
+  const records = getFuelRecords();
+  const index = records.findIndex((r) => r.id === record.id);
+  if (index !== -1) {
+    records[index] = record;
+    localStorage.setItem("fuel", JSON.stringify(records));
+  }
+}
+
+export function deleteFuelRecord(id: string) {
+  const records = getFuelRecords();
+  const filtered = records.filter((r) => r.id !== id);
+  localStorage.setItem("fuel", JSON.stringify(filtered));
+}
+
+
+

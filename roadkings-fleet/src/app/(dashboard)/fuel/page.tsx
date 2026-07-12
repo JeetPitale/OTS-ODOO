@@ -1,9 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Header, KpiCard, DataTable, type ColumnDef } from "@/components/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Fuel, IndianRupee, TrendingDown, Plus, Filter, Download, BarChart3 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Fuel, IndianRupee, TrendingDown, Plus, Filter, Download, BarChart3, X } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -15,28 +18,7 @@ import {
   LineChart,
   Line,
 } from "recharts";
-
-interface FuelRecord {
-  id: string;
-  vehicle: string;
-  date: string;
-  station: string;
-  fuelType: string;
-  quantity: string;
-  rate: string;
-  amount: string;
-  odometer: string;
-  driver: string;
-}
-
-const fuelRecords: FuelRecord[] = [
-  { id: "FUL-2201", vehicle: "MH-04 AB 1234", date: "2025-01-08", station: "HP Petrol Pump, Thane", fuelType: "Diesel", quantity: "120 L", rate: "₹89.50", amount: "₹10,740", odometer: "45,230 km", driver: "Rajesh Kumar" },
-  { id: "FUL-2200", vehicle: "DL-01 CD 5678", date: "2025-01-07", station: "Indian Oil, Gurgaon", fuelType: "Diesel", quantity: "95 L", rate: "₹88.90", amount: "₹8,446", odometer: "62,100 km", driver: "Amit Singh" },
-  { id: "FUL-2199", vehicle: "KA-01 EF 9012", date: "2025-01-07", station: "BPCL, Whitefield", fuelType: "Diesel", quantity: "150 L", rate: "₹90.20", amount: "₹13,530", odometer: "31,400 km", driver: "Suresh Reddy" },
-  { id: "FUL-2198", vehicle: "TS-09 GH 3456", date: "2025-01-06", station: "HP, Secunderabad", fuelType: "Diesel", quantity: "110 L", rate: "₹89.80", amount: "₹9,878", odometer: "78,920 km", driver: "Mohan Rao" },
-  { id: "FUL-2197", vehicle: "WB-06 IJ 7890", date: "2025-01-06", station: "Indian Oil, Howrah", fuelType: "Diesel", quantity: "60 L", rate: "₹88.60", amount: "₹5,316", odometer: "18,750 km", driver: "Debashis Das" },
-  { id: "FUL-2196", vehicle: "RJ-14 MN 3344", date: "2025-01-05", station: "BPCL, Jaipur", fuelType: "Diesel", quantity: "140 L", rate: "₹89.40", amount: "₹12,516", odometer: "52,800 km", driver: "Vikas Meena" },
-];
+import { getFuelRecords, addFuelRecord, updateFuelRecord, deleteFuelRecord, getVehicles, getDrivers, type FuelRecord, type Vehicle, type Driver } from "@/lib/storage";
 
 const monthlyExpenses = [
   { month: "Aug", fuel: 980000, maintenance: 280000, tolls: 120000 },
@@ -56,29 +38,174 @@ const fuelEfficiency = [
   { week: "W6", avgKmpl: 4.2 },
 ];
 
-const columns: ColumnDef<FuelRecord>[] = [
-  { header: "Txn ID", accessorKey: "id", sortable: true },
-  { header: "Vehicle", accessorKey: "vehicle", sortable: true },
-  { header: "Date", accessorKey: "date", sortable: true },
-  { header: "Station", accessorKey: "station" },
-  { header: "Type", accessorKey: "fuelType" },
-  { header: "Qty", accessorKey: "quantity", sortable: true },
-  { header: "Rate", accessorKey: "rate" },
-  { header: "Amount", accessorKey: "amount", sortable: true },
-  { header: "Odometer", accessorKey: "odometer" },
-  { header: "Driver", accessorKey: "driver" },
-];
-
 export default function FuelPage() {
+  const [fuelRecords, setFuelRecords] = useState<FuelRecord[]>([]);
+  const [vehiclesList, setVehiclesList] = useState<Vehicle[]>([]);
+  const [driversList, setDriversList] = useState<Driver[]>([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<FuelRecord | null>(null);
+
+  const [formData, setFormData] = useState({
+    vehicle: "",
+    date: new Date().toISOString().split("T")[0],
+    station: "",
+    fuelType: "Diesel",
+    quantity: "100 L",
+    rate: "90.00",
+    amount: "9000",
+    odometer: "0 km",
+    driver: "",
+  });
+
+  const [totals, setTotals] = useState({
+    fuelCost: "₹0",
+    totalLitres: "0 L",
+    avgEfficiency: "4.1 km/L",
+    fillupsCount: 0,
+  });
+
+  const refreshList = () => {
+    const list = getFuelRecords();
+    setFuelRecords(list);
+
+    const fillupsCount = list.length;
+    
+    // Calculate total litres dynamically
+    const ltrSum = list
+      .map((r) => parseFloat(r.quantity.replace(/[^0-9.]/g, "")) || 0)
+      .reduce((a, b) => a + b, 0);
+
+    // Calculate total cost dynamically
+    const costSum = list
+      .map((r) => parseFloat(r.amount.replace(/[^0-9.]/g, "")) || 0)
+      .reduce((a, b) => a + b, 0);
+
+    setTotals({
+      fuelCost: `₹${(costSum / 1000).toFixed(1)}K`,
+      totalLitres: `${ltrSum.toLocaleString()} L`,
+      avgEfficiency: "4.1 km/L",
+      fillupsCount,
+    });
+  };
+
+  useEffect(() => {
+    refreshList();
+    setVehiclesList(getVehicles());
+    setDriversList(getDrivers());
+  }, []);
+
+  const handleOpenAdd = () => {
+    setEditingRecord(null);
+    setFormData({
+      vehicle: vehiclesList[0]?.number || "",
+      date: new Date().toISOString().split("T")[0],
+      station: "",
+      fuelType: "Diesel",
+      quantity: "100 L",
+      rate: "90.00",
+      amount: "9000",
+      odometer: "10000 km",
+      driver: driversList[0]?.name || "",
+    });
+    setIsOpen(true);
+  };
+
+  const handleOpenEdit = (r: FuelRecord) => {
+    setEditingRecord(r);
+    setFormData({
+      vehicle: r.vehicle,
+      date: r.date,
+      station: r.station,
+      fuelType: r.fuelType,
+      quantity: r.quantity,
+      rate: r.rate.replace("₹", ""),
+      amount: r.amount.replace("₹", "").replace(",", ""),
+      odometer: r.odometer,
+      driver: r.driver,
+    });
+    setIsOpen(true);
+  };
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Auto-formatting rate/amount/quantity
+    const qtyVal = formData.quantity.toLowerCase().includes("l") ? formData.quantity : `${formData.quantity} L`;
+    const formattedRate = formData.rate.startsWith("₹") ? formData.rate : `₹${formData.rate}`;
+    const formattedAmount = formData.amount.startsWith("₹") ? formData.amount : `₹${parseFloat(formData.amount).toLocaleString()}`;
+    const formattedOdo = formData.odometer.toLowerCase().includes("km") ? formData.odometer : `${formData.odometer} km`;
+
+    const finalRecord = {
+      ...formData,
+      quantity: qtyVal,
+      rate: formattedRate,
+      amount: formattedAmount,
+      odometer: formattedOdo,
+    };
+
+    if (editingRecord) {
+      updateFuelRecord({
+        ...editingRecord,
+        ...finalRecord,
+      });
+    } else {
+      addFuelRecord(finalRecord);
+    }
+    setIsOpen(false);
+    refreshList();
+  };
+
+  const columns: ColumnDef<FuelRecord>[] = [
+    { header: "Txn ID", accessorKey: "id", sortable: true },
+    { header: "Vehicle", accessorKey: "vehicle", sortable: true },
+    { header: "Date", accessorKey: "date", sortable: true },
+    { header: "Station", accessorKey: "station" },
+    { header: "Type", accessorKey: "fuelType" },
+    { header: "Qty", accessorKey: "quantity", sortable: true },
+    { header: "Rate", accessorKey: "rate" },
+    { header: "Amount", accessorKey: "amount", sortable: true },
+    { header: "Odometer", accessorKey: "odometer" },
+    { header: "Driver", accessorKey: "driver" },
+    {
+      header: "Actions",
+      accessorKey: "id",
+      cell: (row) => (
+        <div className="flex gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs rounded-lg border-primary/20 hover:border-primary text-primary px-2"
+            onClick={() => handleOpenEdit(row)}
+          >
+            Edit
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs rounded-lg text-red-500 hover:text-red-700 hover:bg-red-50 px-2"
+            onClick={() => {
+              if (confirm(`Are you sure you want to delete fuel txn ${row.id}?`)) {
+                deleteFuelRecord(row.id);
+                refreshList();
+              }
+            }}
+          >
+            Delete
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <>
       <Header title="Fuel & Expense Management" subtitle="Track fuel consumption and fleet expenses" />
       <div className="p-6 space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <KpiCard title="Fuel Cost (MTD)" value="₹12.4L" icon={Fuel} trend={{ value: "8% below budget", direction: "up" }} />
-          <KpiCard title="Total Expenses (MTD)" value="₹16.9L" icon={IndianRupee} iconBgClass="bg-amber-50" trend={{ value: "5% above last month", direction: "down" }} />
-          <KpiCard title="Avg Fuel Efficiency" value="4.1 km/L" icon={TrendingDown} iconBgClass="bg-blue-50" trend={{ value: "+0.3 vs last month", direction: "up" }} />
-          <KpiCard title="Total Litres (MTD)" value="14,280 L" icon={Fuel} iconBgClass="bg-emerald-50" trend={{ value: "156 fill-ups", direction: "neutral" }} />
+          <KpiCard title="Fuel Cost" value={totals.fuelCost} icon={Fuel} trend={{ value: "Dynamic calculation", direction: "neutral" }} />
+          <KpiCard title="Total Fill-ups" value={totals.fillupsCount} icon={IndianRupee} iconBgClass="bg-amber-50" trend={{ value: "Lifetime log entries", direction: "neutral" }} />
+          <KpiCard title="Avg Fuel Efficiency" value={totals.avgEfficiency} icon={TrendingDown} iconBgClass="bg-blue-50" trend={{ value: "+0.3 vs last month", direction: "up" }} />
+          <KpiCard title="Total Litres" value={totals.totalLitres} icon={Fuel} iconBgClass="bg-emerald-50" trend={{ value: "Dynamic calculation", direction: "neutral" }} />
         </div>
 
         {/* Charts */}
@@ -95,8 +222,8 @@ export default function FuelPage() {
                 <BarChart data={monthlyExpenses}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                   <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="#94a3b8" />
-                  <YAxis tick={{ fontSize: 12 }} stroke="#94a3b8" tickFormatter={(v: unknown) => `${(Number(v) / 100000).toFixed(1)}L`} />
-                  <Tooltip formatter={(value: unknown) => `₹${(Number(value) / 1000).toFixed(0)}K`} />
+                  <YAxis tick={{ fontSize: 12 }} stroke="#94a3b8" tickFormatter={(v: any) => `${(Number(v) / 100000).toFixed(1)}L`} />
+                  <Tooltip formatter={(value: any) => `₹${(Number(value) / 1000).toFixed(0)}K`} />
                   <Bar dataKey="fuel" fill="#FF6B1A" radius={[4, 4, 0, 0]} name="Fuel" />
                   <Bar dataKey="maintenance" fill="#0284c7" radius={[4, 4, 0, 0]} name="Maintenance" />
                   <Bar dataKey="tolls" fill="#10b981" radius={[4, 4, 0, 0]} name="Tolls" />
@@ -137,7 +264,7 @@ export default function FuelPage() {
               <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs gap-1">
                 <Download className="h-3.5 w-3.5" /> Export
               </Button>
-              <Button size="sm" className="h-8 rounded-lg text-xs gap-1 bg-primary hover:bg-primary/90 text-white">
+              <Button onClick={handleOpenAdd} size="sm" className="h-8 rounded-lg text-xs gap-1 bg-primary hover:bg-primary/90 text-white">
                 <Plus className="h-3.5 w-3.5" /> Log Entry
               </Button>
             </div>
@@ -152,6 +279,170 @@ export default function FuelPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* CRUD dialog */}
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="bg-gradient-to-r from-orange-500 to-amber-500 p-6 text-white flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-bold">
+                  {editingRecord ? "Edit Fuel Log Entry" : "Log Fuel Transaction"}
+                </h3>
+                <p className="text-white/80 text-xs">
+                  {editingRecord ? "Update transaction billing or mileage info" : "Log a new fuel refill receipt"}
+                </p>
+              </div>
+              <button onClick={() => setIsOpen(false)} className="text-white hover:text-orange-100 transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleFormSubmit} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="vehicle" className="text-xs font-semibold text-slate-700">Vehicle No.</Label>
+                  <select
+                    id="vehicle"
+                    value={formData.vehicle}
+                    onChange={(e) => setFormData({ ...formData, vehicle: e.target.value })}
+                    className="w-full h-9 px-3 rounded-lg border border-input bg-transparent text-sm outline-none focus:ring-1 focus:ring-ring"
+                    required
+                  >
+                    <option value="" disabled>Select vehicle</option>
+                    {vehiclesList.map((v) => (
+                      <option key={v.id} value={v.number}>{v.number} ({v.make})</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="driver" className="text-xs font-semibold text-slate-700">Driver</Label>
+                  <select
+                    id="driver"
+                    value={formData.driver}
+                    onChange={(e) => setFormData({ ...formData, driver: e.target.value })}
+                    className="w-full h-9 px-3 rounded-lg border border-input bg-transparent text-sm outline-none focus:ring-1 focus:ring-ring"
+                    required
+                  >
+                    <option value="" disabled>Select driver</option>
+                    {driversList.map((d) => (
+                      <option key={d.id} value={d.name}>{d.name} ({d.id})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="date" className="text-xs font-semibold text-slate-700">Transaction Date</Label>
+                  <Input
+                    id="date"
+                    type="date"
+                    value={formData.date}
+                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="fuelType" className="text-xs font-semibold text-slate-700">Fuel Type</Label>
+                  <select
+                    id="fuelType"
+                    value={formData.fuelType}
+                    onChange={(e) => setFormData({ ...formData, fuelType: e.target.value })}
+                    className="w-full h-9 px-3 rounded-lg border border-input bg-transparent text-sm outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    <option value="Diesel">Diesel</option>
+                    <option value="Petrol">Petrol</option>
+                    <option value="CNG">CNG</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="station" className="text-xs font-semibold text-slate-700">Fuel Station / Location</Label>
+                <Input
+                  id="station"
+                  value={formData.station}
+                  onChange={(e) => setFormData({ ...formData, station: e.target.value })}
+                  placeholder="HP Petrol Pump, Thane"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="quantity" className="text-xs font-semibold text-slate-700">Quantity (Litres)</Label>
+                  <Input
+                    id="quantity"
+                    value={formData.quantity}
+                    onChange={(e) => {
+                      const qty = e.target.value;
+                      const rateNum = parseFloat(formData.rate) || 0;
+                      const qtyNum = parseFloat(qty) || 0;
+                      setFormData({
+                        ...formData,
+                        quantity: qty,
+                        amount: qtyNum > 0 && rateNum > 0 ? String(qtyNum * rateNum) : formData.amount
+                      });
+                    }}
+                    placeholder="120"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="rate" className="text-xs font-semibold text-slate-700">Rate / Litre (₹)</Label>
+                  <Input
+                    id="rate"
+                    value={formData.rate}
+                    onChange={(e) => {
+                      const rate = e.target.value;
+                      const rateNum = parseFloat(rate) || 0;
+                      const qtyNum = parseFloat(formData.quantity) || 0;
+                      setFormData({
+                        ...formData,
+                        rate: rate,
+                        amount: qtyNum > 0 && rateNum > 0 ? String(qtyNum * rateNum) : formData.amount
+                      });
+                    }}
+                    placeholder="89.50"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="amount" className="text-xs font-semibold text-slate-700">Total Amount (₹)</Label>
+                  <Input
+                    id="amount"
+                    value={formData.amount}
+                    onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                    placeholder="10740"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="odometer" className="text-xs font-semibold text-slate-700">Odometer Reading</Label>
+                <Input
+                  id="odometer"
+                  value={formData.odometer}
+                  onChange={(e) => setFormData({ ...formData, odometer: e.target.value })}
+                  placeholder="45,230 km"
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+                <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" className="bg-primary text-white hover:bg-primary/95">
+                  {editingRecord ? "Save Changes" : "Log Entry"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }

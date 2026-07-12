@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -17,9 +17,9 @@ import {
   ShieldCheck,
   Calendar,
 } from "lucide-react";
-import { getDispatchHistory, type DispatchRecord } from "@/lib/storage";
+import { addNotification, getDispatchHistory, type DispatchRecord } from "@/lib/storage";
 
-export default function VerifyDispatchPage() {
+function VerifyDispatchContent() {
   const searchParams = useSearchParams();
   const dispatchId = searchParams.get("id");
 
@@ -36,7 +36,7 @@ export default function VerifyDispatchPage() {
           return;
         }
         const role = userData.user?.role;
-        if (role !== "ADMIN" && role !== "DISPATCH_OPERATOR") {
+        if (role !== "ADMIN" && role !== "DISPATCH_OPERATOR" && role !== "DISPATCH_MANAGER") {
           window.location.href = "/unauthorized";
           return;
         }
@@ -46,6 +46,7 @@ export default function VerifyDispatchPage() {
           const found = history.find((h) => h.dispatchId === dispatchId);
           if (found) {
             setRecord(found);
+            addNotification("QR Verified", `Dispatch QR ${found.dispatchId} was verified successfully.`, "success");
           }
         }
         setLoading(false);
@@ -231,5 +232,20 @@ export default function VerifyDispatchPage() {
         RoadKing Transport challan security checks
       </div>
     </div>
+  );
+}
+
+export default function VerifyDispatchPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center font-sans">
+        <div className="text-center space-y-3">
+          <div className="h-10 w-10 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-muted-foreground font-medium">Loading verify portal...</p>
+        </div>
+      </div>
+    }>
+      <VerifyDispatchContent />
+    </Suspense>
   );
 }

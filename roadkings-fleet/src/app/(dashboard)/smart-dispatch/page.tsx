@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { useForm } from "react-hook-form";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
@@ -38,6 +39,7 @@ import {
   getVehicles,
   getDispatchHistory,
   createDispatch,
+  createDispatchQRPayload,
   completeTrip,
   cancelTrip,
   addScanLog,
@@ -73,6 +75,7 @@ export default function SmartDispatchPage() {
   const [scanSuccess, setScanSuccess] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [scannerMsg, setScannerMsg] = useState("");
+  const [driverConfirmed, setDriverConfirmed] = useState(false);
 
   // Dispatch Mode
   const [warehouseMode, setWarehouseMode] = useState(false);
@@ -82,6 +85,10 @@ export default function SmartDispatchPage() {
   const [currentPass, setCurrentPass] = useState<DispatchRecord | null>(null);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [completeDispatchId, setCompleteDispatchId] = useState<string | null>(null);
+
+  // Summary Confirmation Dialog
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [pendingDispatchData, setPendingDispatchData] = useState<DispatchFormData | null>(null);
 
   // History filtering & search
   const [searchTerm, setSearchTerm] = useState("");
@@ -101,6 +108,7 @@ export default function SmartDispatchPage() {
   const cargoWeight = watch("cargoWeight");
 
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const handleQRDecodedRef = useRef<(decodedText: string) => void>(() => undefined);
 
   // Sound effect synthesizer (Offline-capable Web Audio API)
   const playBeep = (freq = 880, duration = 0.15) => {
@@ -138,7 +146,7 @@ export default function SmartDispatchPage() {
           return;
         }
         const role = userData.user?.role;
-        if (role !== "ADMIN" && role !== "DISPATCH_OPERATOR") {
+        if (role !== "ADMIN" && role !== "DISPATCH_OPERATOR" && role !== "DISPATCH_MANAGER") {
           window.location.href = "/unauthorized";
           return;
         }
@@ -162,7 +170,7 @@ export default function SmartDispatchPage() {
       );
       scanner.render(
         (text) => {
-          handleQRDecoded(text);
+          handleQRDecodedRef.current(text);
           setIsCameraActive(false);
           try {
             scanner?.clear();
@@ -184,7 +192,7 @@ export default function SmartDispatchPage() {
         }
       }
     };
-  }, [isCameraActive]);
+  }, [checkingAuth, isCameraActive]);
 
   if (checkingAuth) {
     return (
@@ -212,6 +220,8 @@ export default function SmartDispatchPage() {
       processDriverVerification(decodedText.trim());
     }
   };
+
+  handleQRDecodedRef.current = handleQRDecoded;
 
   // Driver verification logic
   const processDriverVerification = (id: string) => {
@@ -312,7 +322,7 @@ export default function SmartDispatchPage() {
     }
   };
 
-  // Form Submit (Dispatch Truck)
+  // Form Submit (opens Summary Dialog first)
   const onSubmitDispatch = (data: DispatchFormData) => {
     if (!scannedDriver) return;
 
@@ -320,12 +330,15 @@ export default function SmartDispatchPage() {
     const finalErrors = [...validationErrors];
     const selectedVehicle = vehicles.find((v) => v.id === data.vehicleId);
 
-    if (!selectedVehicle) {
+    if (!selectedVehicle || selectedVehicle.status !== "available") {
       finalErrors.push("Please select a valid assigned vehicle.");
     } else {
       // Check weight capacity
-      const weight = parseFloat(data.cargoWeight) || 0;
+      const weight = parseFloat(data.cargoWeight);
       const capacity = selectedVehicle.capacityKg || 12000;
+      if (!Number.isFinite(weight) || weight <= 0) {
+        finalErrors.push("Cargo weight must be greater than zero.");
+      }
       if (weight > capacity) {
         finalErrors.push(`Cargo weight (${weight} kg) exceeds vehicle load capacity (${capacity} kg).`);
       }
@@ -339,31 +352,56 @@ export default function SmartDispatchPage() {
 
     if (!selectedVehicle) return;
 
-    const fullRecord = createDispatch({
-      tripId: data.tripId,
-      driverId: scannedDriver.id,
-      driverName: scannedDriver.name,
-      vehicleId: selectedVehicle.id,
-      vehicleRegistration: selectedVehicle.number,
-      vehicleName: selectedVehicle.make,
-      source: data.source,
-      destination: data.destination,
-      cargoDescription: data.cargoDescription,
-      cargoWeight: data.cargoWeight,
-      dispatcher: data.dispatcher,
-      expectedDelivery: data.expectedDelivery,
-      distance: data.distance,
-      estimatedRevenue: data.estimatedRevenue,
-      remarks: data.remarks,
-    });
+    // Show Summary Confirmation Dialog instead of dispatching immediately
+    setPendingDispatchData(data);
+    setShowSummaryModal(true);
+  };
 
-    playBeep(1200, 0.25); // Happy triple-beep or longer success tone
+  // Confirm dispatch from Summary Dialog
+  const handleConfirmDispatch = () => {
+    if (!scannedDriver || !pendingDispatchData) return;
+    const data = pendingDispatchData;
+    const selectedVehicle = vehicles.find((v) => v.id === data.vehicleId);
+    if (!selectedVehicle) return;
+
+    let fullRecord: DispatchRecord;
+    try {
+      fullRecord = createDispatch({
+        tripId: data.tripId,
+        driverId: scannedDriver.id,
+        driverName: scannedDriver.name,
+        vehicleId: selectedVehicle.id,
+        vehicleRegistration: selectedVehicle.number,
+        vehicleName: selectedVehicle.make,
+        source: data.source,
+        destination: data.destination,
+        cargoDescription: data.cargoDescription,
+        cargoWeight: data.cargoWeight,
+        dispatcher: data.dispatcher,
+        expectedDelivery: data.expectedDelivery,
+        distance: data.distance,
+        estimatedRevenue: data.estimatedRevenue,
+        remarks: data.remarks,
+      });
+    } catch (error) {
+      setValidationErrors([error instanceof Error ? error.message : "Unable to create dispatch."]);
+      setShowSummaryModal(false);
+      setPendingDispatchData(null);
+      playBeep(330, 0.3);
+      loadData();
+      return;
+    }
+
+    playBeep(1200, 0.25);
+    setShowSummaryModal(false);
+    setPendingDispatchData(null);
     setCurrentPass(fullRecord);
     setShowPassModal(true);
 
     // Reset Scanner & Form
     setScannedDriver(null);
     setScanSuccess(false);
+    setDriverConfirmed(false);
     loadData();
   };
 
@@ -585,6 +623,7 @@ export default function SmartDispatchPage() {
                             onClick={() => {
                               setScanSuccess(false);
                               setScannedDriver(null);
+                              setDriverConfirmed(false);
                             }}
                             variant="outline"
                             size="sm"
@@ -684,9 +723,12 @@ export default function SmartDispatchPage() {
                       className="space-y-5"
                     >
                       <div className="flex items-center gap-4 bg-slate-50 p-4 border border-slate-100 rounded-2xl">
-                        <img
+                        <Image
                           src={scannedDriver.photoUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200"}
                           alt={scannedDriver.name}
+                          width={56}
+                          height={56}
+                          unoptimized
                           className="w-14 h-14 rounded-full object-cover border-2 border-white shadow flex-shrink-0"
                         />
                         <div className="space-y-0.5">
@@ -741,6 +783,51 @@ export default function SmartDispatchPage() {
                           </motion.div>
                         )}
                       </AnimatePresence>
+
+                      {/* Confirm / Scan Again / Cancel Buttons */}
+                      {!driverConfirmed && (
+                        <div className="flex items-center gap-2 pt-3 border-t border-border/50">
+                          <Button
+                            onClick={() => setDriverConfirmed(true)}
+                            disabled={validationErrors.length > 0}
+                            className="rounded-xl text-xs h-9 bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1.5 shadow-md shadow-emerald-600/20 flex-1"
+                          >
+                            <CheckCircle className="h-3.5 w-3.5" /> Confirm Driver
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              setScannedDriver(null);
+                              setScanSuccess(false);
+                              setDriverConfirmed(false);
+                              setValidationErrors([]);
+                            }}
+                            variant="outline"
+                            className="rounded-xl text-xs h-9 gap-1.5"
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" /> Scan Again
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              setScannedDriver(null);
+                              setScanSuccess(false);
+                              setDriverConfirmed(false);
+                              setValidationErrors([]);
+                              setScanError(null);
+                            }}
+                            variant="ghost"
+                            className="rounded-xl text-xs h-9 text-red-600 hover:bg-red-50 hover:text-red-700"
+                          >
+                            <XCircle className="h-3.5 w-3.5" /> Cancel
+                          </Button>
+                        </div>
+                      )}
+
+                      {driverConfirmed && (
+                        <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 text-xs flex items-center gap-2 text-primary font-semibold">
+                          <CheckCircle className="h-4 w-4" />
+                          Driver confirmed — fill the dispatch form below.
+                        </div>
+                      )}
                     </motion.div>
                   ) : (
                     <div className="flex flex-col items-center justify-center text-center py-10 text-muted-foreground flex-grow">
@@ -771,8 +858,8 @@ export default function SmartDispatchPage() {
               </Card>
             </div>
 
-            {/* Bottom Form: Dispatch Cargo & Vehicle */}
-            {scannedDriver && (
+            {/* Bottom Form: Dispatch Cargo & Vehicle — only after driver is confirmed */}
+            {scannedDriver && driverConfirmed && (
               <motion.div
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -939,6 +1026,7 @@ export default function SmartDispatchPage() {
                           onClick={() => {
                             setScannedDriver(null);
                             setScanSuccess(false);
+                            setDriverConfirmed(false);
                           }}
                           variant="ghost"
                           className="rounded-xl text-xs h-10 px-4"
@@ -947,7 +1035,7 @@ export default function SmartDispatchPage() {
                         </Button>
                         <Button
                           type="submit"
-                          disabled={validationErrors.length > 0}
+                          disabled={validationErrors.length > 0 || !driverConfirmed}
                           className="rounded-xl text-xs h-10 px-6 bg-primary hover:bg-primary/90 text-white font-bold shadow-md shadow-primary/20"
                         >
                           🚀 Confirm & Dispatch Truck
@@ -1157,23 +1245,7 @@ export default function SmartDispatchPage() {
                     {/* Render Canvas QR Code */}
                     <QRCodeCanvas
                       id={`pass-qr-${currentPass.dispatchId}`}
-                      value={JSON.stringify({
-                        dispatchId: currentPass.dispatchId,
-                        tripId: currentPass.tripId,
-                        driverId: currentPass.driverId,
-                        driverName: currentPass.driverName,
-                        vehicleId: currentPass.vehicleId,
-                        vehicleRegistration: currentPass.vehicleRegistration,
-                        vehicleName: currentPass.vehicleName,
-                        source: currentPass.source,
-                        destination: currentPass.destination,
-                        cargoWeight: currentPass.cargoWeight,
-                        dispatchDate: currentPass.dispatchDate,
-                        dispatchTime: currentPass.dispatchTime,
-                        dispatcher: currentPass.dispatcher,
-                        tripStatus: currentPass.tripStatus,
-                        expectedDelivery: currentPass.expectedDelivery,
-                      })}
+                      value={createDispatchQRPayload(currentPass)}
                       size={120}
                       level="Q"
                       includeMargin={true}
@@ -1293,6 +1365,118 @@ export default function SmartDispatchPage() {
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
+
+      {/* MODAL 3: SUMMARY CONFIRMATION DIALOG */}
+      <AnimatePresence>
+        {showSummaryModal && pendingDispatchData && scannedDriver && (() => {
+          const sv = vehicles.find((v) => v.id === pendingDispatchData.vehicleId);
+          return (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-white rounded-2xl w-full max-w-lg overflow-hidden border border-border shadow-2xl"
+              >
+                <div className="bg-gradient-to-r from-orange-500 to-amber-500 p-5 text-white">
+                  <h3 className="font-bold text-base leading-none">Dispatch Summary</h3>
+                  <p className="text-[10px] text-white/80 font-medium uppercase tracking-wider mt-1">Review all details before confirming dispatch</p>
+                </div>
+
+                <div className="p-6 space-y-5 max-h-[60vh] overflow-y-auto">
+                  {/* Driver */}
+                  <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <Image
+                      src={scannedDriver.photoUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200"}
+                      alt={scannedDriver.name}
+                      width={40}
+                      height={40}
+                      unoptimized
+                      className="w-10 h-10 rounded-full object-cover border-2 border-white shadow flex-shrink-0"
+                    />
+                    <div>
+                      <p className="font-bold text-sm text-slate-800">{scannedDriver.name}</p>
+                      <p className="text-[10px] text-muted-foreground">ID: {scannedDriver.id} · Safety: {scannedDriver.safetyScore}%</p>
+                    </div>
+                  </div>
+
+                  {/* Vehicle */}
+                  {sv && (
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs space-y-1">
+                      <label className="text-[10px] text-muted-foreground uppercase font-bold">Assigned Vehicle</label>
+                      <p className="font-bold text-sm text-slate-800">{sv.number} — {sv.make}</p>
+                      <p className="text-[10px] text-muted-foreground">Type: {sv.type} · Max Capacity: {(sv.capacityKg || 12000).toLocaleString()} kg</p>
+                    </div>
+                  )}
+
+                  {/* Route & Cargo */}
+                  <div className="grid grid-cols-2 gap-4 text-xs">
+                    <div>
+                      <label className="text-[10px] text-muted-foreground uppercase font-bold">Source</label>
+                      <p className="font-semibold text-slate-800 mt-0.5">{pendingDispatchData.source}</p>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-muted-foreground uppercase font-bold">Destination</label>
+                      <p className="font-semibold text-slate-800 mt-0.5">{pendingDispatchData.destination}</p>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-muted-foreground uppercase font-bold">Cargo</label>
+                      <p className="font-semibold text-slate-800 mt-0.5">{pendingDispatchData.cargoDescription}</p>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-muted-foreground uppercase font-bold">Cargo Weight</label>
+                      <p className="font-semibold text-slate-800 mt-0.5">{pendingDispatchData.cargoWeight} kg</p>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-muted-foreground uppercase font-bold">Distance</label>
+                      <p className="font-semibold text-slate-800 mt-0.5">{pendingDispatchData.distance}</p>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-muted-foreground uppercase font-bold">Expected Delivery</label>
+                      <p className="font-semibold text-slate-800 mt-0.5">{pendingDispatchData.expectedDelivery}</p>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-muted-foreground uppercase font-bold">Dispatcher</label>
+                      <p className="font-semibold text-slate-800 mt-0.5">{pendingDispatchData.dispatcher}</p>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-muted-foreground uppercase font-bold">Warehouse</label>
+                      <p className="font-semibold text-slate-800 mt-0.5">{pendingDispatchData.warehouse}</p>
+                    </div>
+                  </div>
+
+                  {pendingDispatchData.remarks && (
+                    <div className="text-xs border-t border-slate-100 pt-3">
+                      <label className="text-[10px] text-muted-foreground uppercase font-bold">Remarks</label>
+                      <p className="font-medium text-slate-700 mt-0.5">{pendingDispatchData.remarks}</p>
+                    </div>
+                  )}
+
+                  <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-3 text-[11px] font-medium">
+                    ⚠️ This will mark the driver as <strong>On Trip</strong>, assign the vehicle, generate a <strong>Dispatch QR Challan</strong>, and create a trip record.
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 border-t border-border p-4 flex gap-2 justify-end">
+                  <Button
+                    onClick={() => { setShowSummaryModal(false); setPendingDispatchData(null); }}
+                    variant="ghost"
+                    className="rounded-lg text-xs h-9"
+                  >
+                    Go Back & Edit
+                  </Button>
+                  <Button
+                    onClick={handleConfirmDispatch}
+                    className="rounded-lg text-xs h-9 bg-primary hover:bg-primary/90 text-white font-bold shadow-md shadow-primary/20 px-5"
+                  >
+                    🚀 Confirm & Dispatch
+                  </Button>
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
       </AnimatePresence>
     </>
   );

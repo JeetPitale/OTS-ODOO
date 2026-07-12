@@ -1,33 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Header, KpiCard, StatusBadge, DataTable, type ColumnDef } from "@/components/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Wrench, AlertTriangle, Clock, Plus, Filter, Download, IndianRupee } from "lucide-react";
-import type { StatusVariant } from "@/lib/status-colors";
-
-interface MaintenanceRecord {
-  id: string;
-  vehicle: string;
-  type: string;
-  description: string;
-  status: StatusVariant;
-  priority: string;
-  scheduledDate: string;
-  completedDate: string;
-  cost: string;
-  technician: string;
-}
-
-const maintenanceRecords: MaintenanceRecord[] = [
-  { id: "MNT-401", vehicle: "MH-04 AB 1234", type: "Preventive", description: "Engine oil change & filter replacement", status: "scheduled", priority: "Medium", scheduledDate: "2025-01-15", completedDate: "—", cost: "₹4,200", technician: "Ram Auto Works" },
-  { id: "MNT-400", vehicle: "KA-01 EF 9012", type: "Corrective", description: "Brake pad replacement – front axle", status: "in-maintenance", priority: "High", scheduledDate: "2025-01-08", completedDate: "—", cost: "₹12,500", technician: "Fleet Service Hub" },
-  { id: "MNT-399", vehicle: "DL-01 CD 5678", type: "Preventive", description: "Tyre rotation and alignment check", status: "completed", priority: "Low", scheduledDate: "2025-01-05", completedDate: "2025-01-05", cost: "₹3,800", technician: "Tyre King Services" },
-  { id: "MNT-398", vehicle: "TS-09 GH 3456", type: "Corrective", description: "AC compressor repair", status: "completed", priority: "Medium", scheduledDate: "2025-01-03", completedDate: "2025-01-04", cost: "₹8,900", technician: "CoolTech Motors" },
-  { id: "MNT-397", vehicle: "MH-12 OP 5566", type: "Corrective", description: "Transmission overhaul – gearbox leak", status: "in-maintenance", priority: "Critical", scheduledDate: "2025-01-06", completedDate: "—", cost: "₹45,000", technician: "Precision Gears Pvt Ltd" },
-  { id: "MNT-396", vehicle: "WB-06 IJ 7890", type: "Preventive", description: "Annual fitness inspection (RTO)", status: "scheduled", priority: "High", scheduledDate: "2025-01-20", completedDate: "—", cost: "₹2,500", technician: "RTO Authorized Center" },
-  { id: "MNT-395", vehicle: "GJ-05 KL 1122", type: "Corrective", description: "Exhaust system welding & patch", status: "completed", priority: "Low", scheduledDate: "2024-12-28", completedDate: "2024-12-29", cost: "₹6,200", technician: "Shree Fabricators" },
-];
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Wrench, AlertTriangle, Clock, Plus, Filter, Download, IndianRupee, X } from "lucide-react";
+import { getMaintenanceRecords, addMaintenanceRecord, updateMaintenanceRecord, deleteMaintenanceRecord, getVehicles, type MaintenanceRecord, type Vehicle } from "@/lib/storage";
 
 function PriorityBadge({ priority }: { priority: string }) {
   const colors: Record<string, string> = {
@@ -43,37 +23,162 @@ function PriorityBadge({ priority }: { priority: string }) {
   );
 }
 
-const columns: ColumnDef<MaintenanceRecord>[] = [
-  { header: "ID", accessorKey: "id", sortable: true },
-  { header: "Vehicle", accessorKey: "vehicle", sortable: true },
-  { header: "Type", accessorKey: "type", sortable: true },
-  { header: "Description", accessorKey: "description" },
-  {
-    header: "Status",
-    accessorKey: "status",
-    cell: (row) => <StatusBadge variant={row.status} />,
-  },
-  {
-    header: "Priority",
-    accessorKey: "priority",
-    sortable: true,
-    cell: (row) => <PriorityBadge priority={row.priority} />,
-  },
-  { header: "Scheduled", accessorKey: "scheduledDate", sortable: true },
-  { header: "Cost", accessorKey: "cost", sortable: true },
-  { header: "Technician", accessorKey: "technician" },
-];
-
 export default function MaintenancePage() {
+  const [recordsList, setRecordsList] = useState<MaintenanceRecord[]>([]);
+  const [vehiclesList, setVehiclesList] = useState<Vehicle[]>([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<MaintenanceRecord | null>(null);
+
+  const [formData, setFormData] = useState({
+    vehicle: "",
+    type: "Preventive",
+    description: "",
+    status: "scheduled" as any,
+    priority: "Medium",
+    scheduledDate: new Date().toISOString().split("T")[0],
+    completedDate: "—",
+    cost: "₹0",
+    technician: "",
+  });
+
+  const [totals, setTotals] = useState({
+    pendingJobs: 0,
+    inProgress: 0,
+    completed: 0,
+    totalCost: "₹0",
+  });
+
+  const refreshList = () => {
+    const list = getMaintenanceRecords();
+    setRecordsList(list);
+
+    const pendingJobs = list.filter((r) => r.status === "scheduled").length;
+    const inProgress = list.filter((r) => r.status === "in-maintenance" || r.status === "in-shop").length;
+    const completed = list.filter((r) => r.status === "completed").length;
+
+    // Calculate total cost dynamically
+    const costSum = list
+      .map((r) => parseInt(r.cost.replace(/[^0-9]/g, "")) || 0)
+      .reduce((a, b) => a + b, 0);
+
+    setTotals({
+      pendingJobs,
+      inProgress,
+      completed,
+      totalCost: `₹${(costSum / 1000).toFixed(1)}K`,
+    });
+  };
+
+  useEffect(() => {
+    refreshList();
+    setVehiclesList(getVehicles());
+  }, []);
+
+  const handleOpenAdd = () => {
+    setEditingRecord(null);
+    setFormData({
+      vehicle: vehiclesList[0]?.number || "",
+      type: "Preventive",
+      description: "",
+      status: "scheduled",
+      priority: "Medium",
+      scheduledDate: new Date().toISOString().split("T")[0],
+      completedDate: "—",
+      cost: "₹1,500",
+      technician: "",
+    });
+    setIsOpen(true);
+  };
+
+  const handleOpenEdit = (r: MaintenanceRecord) => {
+    setEditingRecord(r);
+    setFormData({
+      vehicle: r.vehicle,
+      type: r.type,
+      description: r.description,
+      status: r.status,
+      priority: r.priority,
+      scheduledDate: r.scheduledDate,
+      completedDate: r.completedDate,
+      cost: r.cost,
+      technician: r.technician,
+    });
+    setIsOpen(true);
+  };
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingRecord) {
+      updateMaintenanceRecord({
+        ...editingRecord,
+        ...formData,
+      });
+    } else {
+      addMaintenanceRecord(formData);
+    }
+    setIsOpen(false);
+    refreshList();
+  };
+
+  const columns: ColumnDef<MaintenanceRecord>[] = [
+    { header: "ID", accessorKey: "id", sortable: true },
+    { header: "Vehicle", accessorKey: "vehicle", sortable: true },
+    { header: "Type", accessorKey: "type", sortable: true },
+    { header: "Description", accessorKey: "description" },
+    {
+      header: "Status",
+      accessorKey: "status",
+      cell: (row) => <StatusBadge variant={row.status} />,
+    },
+    {
+      header: "Priority",
+      accessorKey: "priority",
+      sortable: true,
+      cell: (row) => <PriorityBadge priority={row.priority} />,
+    },
+    { header: "Scheduled", accessorKey: "scheduledDate", sortable: true },
+    { header: "Cost", accessorKey: "cost", sortable: true },
+    { header: "Technician", accessorKey: "technician" },
+    {
+      header: "Actions",
+      accessorKey: "id",
+      cell: (row) => (
+        <div className="flex gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs rounded-lg border-primary/20 hover:border-primary text-primary px-2"
+            onClick={() => handleOpenEdit(row)}
+          >
+            Edit
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs rounded-lg text-red-500 hover:text-red-700 hover:bg-red-50 px-2"
+            onClick={() => {
+              if (confirm(`Are you sure you want to delete record ${row.id}?`)) {
+                deleteMaintenanceRecord(row.id);
+                refreshList();
+              }
+            }}
+          >
+            Delete
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <>
       <Header title="Maintenance" subtitle="Schedule and track vehicle maintenance" />
       <div className="p-6 space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <KpiCard title="Pending Jobs" value={8} icon={Wrench} trend={{ value: "3 overdue", direction: "down" }} />
-          <KpiCard title="In Progress" value={4} icon={Clock} iconBgClass="bg-orange-50" trend={{ value: "2 critical", direction: "down" }} />
-          <KpiCard title="Completed (MTD)" value={23} icon={Wrench} iconBgClass="bg-emerald-50" trend={{ value: "+8 vs last month", direction: "up" }} />
-          <KpiCard title="Total Cost (MTD)" value="₹2.8L" icon={IndianRupee} iconBgClass="bg-amber-50" trend={{ value: "12% under budget", direction: "up" }} />
+          <KpiCard title="Pending Jobs" value={totals.pendingJobs} icon={Wrench} trend={{ value: "Jobs scheduled", direction: "neutral" }} />
+          <KpiCard title="In Progress" value={totals.inProgress} icon={Clock} iconBgClass="bg-orange-50" trend={{ value: "Currently in shop", direction: "neutral" }} />
+          <KpiCard title="Completed" value={totals.completed} icon={Wrench} iconBgClass="bg-emerald-50" trend={{ value: "Lifetime completed", direction: "up" }} />
+          <KpiCard title="Total Cost" value={totals.totalCost} icon={IndianRupee} iconBgClass="bg-amber-50" trend={{ value: "Dynamic calculation", direction: "up" }} />
         </div>
 
         <Card className="rounded-xl ambient-shadow border-0 ring-0">
@@ -89,7 +194,7 @@ export default function MaintenancePage() {
               <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs gap-1">
                 <Download className="h-3.5 w-3.5" /> Export
               </Button>
-              <Button size="sm" className="h-8 rounded-lg text-xs gap-1 bg-primary hover:bg-primary/90 text-white">
+              <Button onClick={handleOpenAdd} size="sm" className="h-8 rounded-lg text-xs gap-1 bg-primary hover:bg-primary/90 text-white">
                 <Plus className="h-3.5 w-3.5" /> Schedule Job
               </Button>
             </div>
@@ -97,13 +202,162 @@ export default function MaintenancePage() {
           <CardContent>
             <DataTable
               columns={columns}
-              data={maintenanceRecords}
+              data={recordsList}
               searchKey="vehicle"
               searchPlaceholder="Search by vehicle number..."
             />
           </CardContent>
         </Card>
       </div>
+
+      {/* Modal CRUD dialog */}
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="bg-gradient-to-r from-orange-500 to-amber-500 p-6 text-white flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-bold">
+                  {editingRecord ? "Edit Maintenance Job" : "Schedule Maintenance Job"}
+                </h3>
+                <p className="text-white/80 text-xs">
+                  {editingRecord ? "Modify job assignment or details" : "Schedule preventive or corrective service"}
+                </p>
+              </div>
+              <button onClick={() => setIsOpen(false)} className="text-white hover:text-orange-100 transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleFormSubmit} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="vehicle" className="text-xs font-semibold text-slate-700">Vehicle No.</Label>
+                  <select
+                    id="vehicle"
+                    value={formData.vehicle}
+                    onChange={(e) => setFormData({ ...formData, vehicle: e.target.value })}
+                    className="w-full h-9 px-3 rounded-lg border border-input bg-transparent text-sm outline-none focus:ring-1 focus:ring-ring"
+                    required
+                  >
+                    <option value="" disabled>Select vehicle</option>
+                    {vehiclesList.map((v) => (
+                      <option key={v.id} value={v.number}>{v.number} ({v.make})</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="type" className="text-xs font-semibold text-slate-700">Service Type</Label>
+                  <select
+                    id="type"
+                    value={formData.type}
+                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                    className="w-full h-9 px-3 rounded-lg border border-input bg-transparent text-sm outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    <option value="Preventive">Preventive</option>
+                    <option value="Corrective">Corrective</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="description" className="text-xs font-semibold text-slate-700">Description</Label>
+                <Input
+                  id="description"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Engine oil change & filter replacement"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="status" className="text-xs font-semibold text-slate-700">Status</Label>
+                  <select
+                    id="status"
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                    className="w-full h-9 px-3 rounded-lg border border-input bg-transparent text-sm outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    <option value="scheduled">Scheduled</option>
+                    <option value="in-maintenance">In Maintenance</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="priority" className="text-xs font-semibold text-slate-700">Priority</Label>
+                  <select
+                    id="priority"
+                    value={formData.priority}
+                    onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+                    className="w-full h-9 px-3 rounded-lg border border-input bg-transparent text-sm outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    <option value="Low">Low</option>
+                    <option value="Medium">Medium</option>
+                    <option value="High">High</option>
+                    <option value="Critical">Critical</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="scheduledDate" className="text-xs font-semibold text-slate-700">Scheduled Date</Label>
+                  <Input
+                    id="scheduledDate"
+                    type="date"
+                    value={formData.scheduledDate}
+                    onChange={(e) => setFormData({ ...formData, scheduledDate: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="completedDate" className="text-xs font-semibold text-slate-700">Completed Date</Label>
+                  <Input
+                    id="completedDate"
+                    value={formData.completedDate}
+                    onChange={(e) => setFormData({ ...formData, completedDate: e.target.value })}
+                    placeholder="2025-01-05 or —"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="cost" className="text-xs font-semibold text-slate-700">Estimated/Actual Cost</Label>
+                  <Input
+                    id="cost"
+                    value={formData.cost}
+                    onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
+                    placeholder="₹4,200"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="technician" className="text-xs font-semibold text-slate-700">Technician / Garage</Label>
+                  <Input
+                    id="technician"
+                    value={formData.technician}
+                    onChange={(e) => setFormData({ ...formData, technician: e.target.value })}
+                    placeholder="Ram Auto Works"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+                <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" className="bg-primary text-white hover:bg-primary/95">
+                  {editingRecord ? "Save Changes" : "Schedule Job"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }

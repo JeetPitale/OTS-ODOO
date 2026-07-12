@@ -12,7 +12,20 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [email, setEmail] = useState("manager@roadkings.com");
+  const [password, setPassword] = useState("password123");
   const router = useRouter();
+
+  const demoAccounts = [
+    { name: "John Manager (Fleet Manager)", email: "manager@roadkings.com", password: "password123" },
+    { name: "Rahul Dispatcher (Dispatcher)", email: "dispatcher@roadkings.com", password: "password123" },
+    { name: "Pradeep Safety (Safety Officer)", email: "safety@roadkings.com", password: "password123" },
+    { name: "Ananya Finance (Financial Analyst)", email: "finance@roadkings.com", password: "password123" },
+    { name: "System Admin (Administrator)", email: "admin@roadkings.com", password: "password123" },
+    { name: "Dispatch Operator (Operator)", email: "operator@roadkings.com", password: "password123" },
+    { name: "John Dispatch Manager (Dispatch Manager)", email: "dispatchmanager@roadkings.com", password: "password123" },
+  ];
+
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -37,14 +50,18 @@ export default function LoginPage() {
         try {
           const userRes = await fetch("/api/auth/me");
           const userData = await userRes.json();
-          if (userData?.user?.role === "DISPATCH_OPERATOR") {
+          if (userData?.user?.role === "DISPATCH_MANAGER") {
+            router.push("/dispatch-dashboard");
+          } else if (userData?.user?.role === "DISPATCH_OPERATOR") {
             router.push("/smart-dispatch");
           } else {
             router.push("/dashboard");
           }
         } catch {
           // Fallback if API fails
-          if (email.includes("operator@roadkings.com") || email.includes("dispatcher@roadkings.com")) {
+          if (email.includes("dispatchmanager@roadkings.com")) {
+            router.push("/dispatch-dashboard");
+          } else if (email.includes("operator@roadkings.com") || email.includes("dispatcher@roadkings.com")) {
             router.push("/smart-dispatch");
           } else {
             router.push("/dashboard");
@@ -407,6 +424,32 @@ export default function LoginPage() {
               </div>
             )}
 
+            {/* Demo Account Dropdown Selector */}
+            <div className="stagger-3 space-y-2">
+              <Label htmlFor="demo-select" className="text-slate-700 text-xs font-semibold pl-1 text-orange-600 flex justify-between">
+                <span>Quick Login (Demo Accounts)</span>
+                <span className="text-[10px] text-slate-400">Autofills credentials</span>
+              </Label>
+              <select
+                id="demo-select"
+                onChange={(e) => {
+                  const acc = demoAccounts.find(a => a.email === e.target.value);
+                  if (acc) {
+                    setEmail(acc.email);
+                    setPassword(acc.password);
+                  }
+                }}
+                value={email}
+                className="w-full h-11 px-3 rounded-xl bg-orange-50/50 border border-orange-200/80 text-slate-800 text-xs font-medium focus:border-orange-500 focus:ring-1 focus:ring-orange-500 focus-visible:ring-0 outline-none transition-all duration-200"
+              >
+                {demoAccounts.map((acc) => (
+                  <option key={acc.email} value={acc.email}>
+                    {acc.name} — password: {acc.password}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Email Field */}
             <div className="stagger-3 space-y-2">
               <Label htmlFor="email" className="text-slate-700 text-xs font-medium pl-1">Email address</Label>
@@ -415,7 +458,8 @@ export default function LoginPage() {
                 name="email"
                 type="email"
                 placeholder="manager@roadkings.com"
-                defaultValue="manager@roadkings.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="h-11 rounded-xl bg-white/95 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-orange-500/80 focus:ring-1 focus:ring-orange-500/50 focus-visible:ring-0 focus-visible:ring-offset-0 transition-colors duration-200"
                 required
               />
@@ -438,7 +482,8 @@ export default function LoginPage() {
                   name="password"
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
-                  defaultValue="password123"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   className="h-11 rounded-xl bg-white/95 border-slate-200 text-slate-900 placeholder-slate-400 pr-10 focus:border-orange-500/80 focus:ring-1 focus:ring-orange-500/50 focus-visible:ring-0 focus-visible:ring-offset-0 transition-colors duration-200"
                   required
                 />

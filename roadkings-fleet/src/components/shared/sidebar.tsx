@@ -14,6 +14,14 @@ import {
   Crown,
   LogOut,
   QrCode,
+  ListTodo,
+  FileSpreadsheet,
+  Activity,
+  History,
+  CheckSquare,
+  Bell,
+  Clock,
+  User,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 
@@ -27,6 +35,19 @@ const navItems = [
   { label: "Fuel & Expenses", href: "/fuel", icon: Fuel },
   { label: "Reports & Analytics", href: "/reports", icon: BarChart3 },
   { label: "Settings & RBAC", href: "/settings", icon: Settings },
+];
+
+const dispatchManagerNavItems = [
+  { label: "Dashboard", href: "/dispatch-dashboard", icon: LayoutDashboard },
+  { label: "Smart Dispatch", href: "/smart-dispatch", icon: QrCode },
+  { label: "QR Management", href: "/qr-management", icon: FileSpreadsheet },
+  { label: "Dispatch Queue", href: "/dispatch-queue", icon: ListTodo },
+  { label: "Active Dispatches", href: "/active-dispatches", icon: Activity },
+  { label: "Dispatch History", href: "/dispatch-history", icon: History },
+  { label: "QR Verification", href: "/qr-verification", icon: CheckSquare },
+  { label: "Notifications", href: "/notifications", icon: Bell },
+  { label: "Shift Summary", href: "/shift-summary", icon: Clock },
+  { label: "Profile", href: "/profile", icon: User },
 ];
 
 interface SidebarProps {
@@ -57,8 +78,14 @@ export function Sidebar({ user }: SidebarProps) {
     .slice(0, 2)
     .toUpperCase() || "JD";
 
+  // Check if role is DISPATCH_MANAGER
+  const isDispatchManager = user?.role === "DISPATCH_MANAGER";
+  const activeNavItems = isDispatchManager ? dispatchManagerNavItems : navItems;
+
   // RBAC filters for default sidebar links
-  const filteredNavItems = navItems.filter((item) => {
+  const filteredNavItems = activeNavItems.filter((item) => {
+    if (isDispatchManager) return true; // Already filtered for Dispatch Manager
+    
     // Only Admin and Dispatch Operator can access Smart Dispatch
     if (item.href === "/smart-dispatch") {
       return user?.role === "ADMIN" || user?.role === "DISPATCH_OPERATOR";
@@ -82,8 +109,12 @@ export function Sidebar({ user }: SidebarProps) {
           <h1 className="text-base font-bold tracking-tight leading-none">
             Road<span className="text-primary">Kings</span>
           </h1>
-          <p className="text-[10px] text-muted-foreground font-medium tracking-widest uppercase">
-            {user?.role === "DISPATCH_OPERATOR" ? "Dispatch Center" : "Fleet Manager"}
+          <p className="text-[10px] text-muted-foreground font-medium tracking-widest uppercase mt-1">
+            {user?.role === "DISPATCH_MANAGER" 
+              ? "Dispatch Manager" 
+              : user?.role === "DISPATCH_OPERATOR" 
+                ? "Dispatch Center" 
+                : "Fleet Manager"}
           </p>
         </div>
       </div>

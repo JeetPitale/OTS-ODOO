@@ -48,6 +48,12 @@ async function main() {
       passwordHash,
       role: Role.DISPATCH_OPERATOR,
     },
+    {
+      name: "John Dispatch Manager",
+      email: "dispatchmanager@roadkings.com",
+      passwordHash,
+      role: Role.DISPATCH_MANAGER,
+    },
   ];
 
   for (const user of usersToCreate) {

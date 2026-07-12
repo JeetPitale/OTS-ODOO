@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Header, StatusBadge } from "@/components/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -194,9 +195,12 @@ export default function DriverDetailsPage() {
           <Card className="lg:col-span-2 rounded-xl border-0 ambient-shadow overflow-hidden">
             <CardHeader className="bg-gradient-to-r from-orange-500/10 to-amber-500/5 pb-6 border-b border-border/50">
               <div className="flex flex-col sm:flex-row items-center gap-5">
-                <img
+                <Image
                   src={driver.photoUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200"}
                   alt={driver.name}
+                  width={80}
+                  height={80}
+                  unoptimized
                   className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-md flex-shrink-0"
                 />
                 <div className="text-center sm:text-left space-y-1">
