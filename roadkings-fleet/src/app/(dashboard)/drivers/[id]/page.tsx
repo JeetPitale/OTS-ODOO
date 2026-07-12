@@ -22,14 +22,18 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
-import { getDrivers, getDriverQRs, updateDriverQR, type Driver } from "@/lib/storage";
+import { useDriver } from "@/hooks/useDrivers";
+import { useDriverQRs, useGenerateDriverQR } from "@/hooks/useQR";
 
 export default function DriverDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const driverId = params.id as string;
 
-  const [driver, setDriver] = useState<Driver | null>(null);
+  const { data: driver, isLoading } = useDriver(driverId);
+  const { data: qrsData } = useDriverQRs();
+  const generateQR = useGenerateDriverQR();
+  
   const [qrValue, setQrValue] = useState<string>("");
   const [copied, setCopied] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
@@ -37,14 +41,15 @@ export default function DriverDetailsPage() {
   const qrRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    const list = getDrivers();
-    const found = list.find((d) => d.id === driverId);
-    if (found) {
-      setDriver(found);
-      const qrs = getDriverQRs();
-      setQrValue(qrs[found.id] || JSON.stringify({ driverId: found.id, driverName: found.name }));
+    if (driver) {
+      const qrs = qrsData || {};
+      setQrValue(qrs[driver.id] || JSON.stringify({ driverId: driver.id, driverName: driver.name }));
     }
-  }, [driverId]);
+  }, [driver, qrsData]);
+
+  if (isLoading) {
+    return <div className="p-8 text-center text-muted-foreground">Loading driver details...</div>;
+  }
 
   if (!driver) {
     return (
@@ -149,20 +154,16 @@ export default function DriverDetailsPage() {
     printWindow.document.close();
   };
 
-  const handleRegenerateQR = () => {
+  const handleRegenerateQR = async () => {
     setRegenerating(true);
-    setTimeout(() => {
-      // Create a fresh payload (simulating token refresh or signature updates)
-      const freshPayload = JSON.stringify({
-        driverId: driver.id,
-        driverName: driver.name,
-        timestamp: Date.now(),
-      });
-      updateDriverQR(driver.id, freshPayload);
-      setQrValue(freshPayload);
-      setRegenerating(false);
+    try {
+      await generateQR.mutateAsync({ driverId: driver.id, driverName: driver.name });
       showFeedback("Driver QR regenerated successfully!");
-    }, 800);
+    } catch (err) {
+      showFeedback("Failed to regenerate QR.");
+    } finally {
+      setRegenerating(false);
+    }
   };
 
   const showFeedback = (msg: string) => {
@@ -207,7 +208,7 @@ export default function DriverDetailsPage() {
                   <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                     <h2 className="text-xl font-bold text-foreground">{driver.name}</h2>
                     <div className="inline-flex justify-center">
-                      <StatusBadge variant={driver.status} />
+                      <StatusBadge variant={driver.status.replace("_", "-") as any} />
                     </div>
                   </div>
                   <p className="text-sm text-muted-foreground font-medium">Driver ID: {driver.id}</p>

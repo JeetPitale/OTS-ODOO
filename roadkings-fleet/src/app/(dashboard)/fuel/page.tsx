@@ -18,7 +18,9 @@ import {
   LineChart,
   Line,
 } from "recharts";
-import { getFuelRecords, addFuelRecord, updateFuelRecord, deleteFuelRecord, getVehicles, getDrivers, type FuelRecord, type Vehicle, type Driver } from "@/lib/storage";
+import { useFuelRecords, useCreateFuel, useUpdateFuel, useDeleteFuel } from "@/hooks/useFuel";
+import { useVehicles } from "@/hooks/useVehicles";
+import { useDrivers } from "@/hooks/useDrivers";
 
 const monthlyExpenses = [
   { month: "Aug", fuel: 980000, maintenance: 280000, tolls: 120000 },
@@ -39,11 +41,19 @@ const fuelEfficiency = [
 ];
 
 export default function FuelPage() {
-  const [fuelRecords, setFuelRecords] = useState<FuelRecord[]>([]);
-  const [vehiclesList, setVehiclesList] = useState<Vehicle[]>([]);
-  const [driversList, setDriversList] = useState<Driver[]>([]);
+  const { data: fuelData, isLoading } = useFuelRecords({ limit: 100 });
+  const { data: vehiclesData } = useVehicles({ limit: 100 });
+  const { data: driversData } = useDrivers({ limit: 100 });
+
+  const createFuel = useCreateFuel();
+  const updateFuel = useUpdateFuel();
+  const deleteFuel = useDeleteFuel();
+
+  const fuelRecords = fuelData?.items || [];
+  const vehiclesList = vehiclesData?.items || [];
+  const driversList = driversData?.items || [];
   const [isOpen, setIsOpen] = useState(false);
-  const [editingRecord, setEditingRecord] = useState<FuelRecord | null>(null);
+  const [editingRecord, setEditingRecord] = useState<any | null>(null);
 
   const [formData, setFormData] = useState({
     vehicle: "",
@@ -57,42 +67,24 @@ export default function FuelPage() {
     driver: "",
   });
 
-  const [totals, setTotals] = useState({
-    fuelCost: "₹0",
-    totalLitres: "0 L",
+  const fillupsCount = fuelRecords.length;
+  
+  // Calculate total litres dynamically
+  const ltrSum = fuelRecords
+    .map((r) => parseFloat(r.quantity?.replace(/[^0-9.]/g, "") || "0") || 0)
+    .reduce((a, b) => a + b, 0);
+
+  // Calculate total cost dynamically
+  const costSum = fuelRecords
+    .map((r) => parseFloat(r.amount?.replace(/[^0-9.]/g, "") || "0") || 0)
+    .reduce((a, b) => a + b, 0);
+
+  const totals = {
+    fuelCost: `₹${(costSum / 1000).toFixed(1)}K`,
+    totalLitres: `${ltrSum.toLocaleString()} L`,
     avgEfficiency: "4.1 km/L",
-    fillupsCount: 0,
-  });
-
-  const refreshList = () => {
-    const list = getFuelRecords();
-    setFuelRecords(list);
-
-    const fillupsCount = list.length;
-    
-    // Calculate total litres dynamically
-    const ltrSum = list
-      .map((r) => parseFloat(r.quantity.replace(/[^0-9.]/g, "")) || 0)
-      .reduce((a, b) => a + b, 0);
-
-    // Calculate total cost dynamically
-    const costSum = list
-      .map((r) => parseFloat(r.amount.replace(/[^0-9.]/g, "")) || 0)
-      .reduce((a, b) => a + b, 0);
-
-    setTotals({
-      fuelCost: `₹${(costSum / 1000).toFixed(1)}K`,
-      totalLitres: `${ltrSum.toLocaleString()} L`,
-      avgEfficiency: "4.1 km/L",
-      fillupsCount,
-    });
+    fillupsCount,
   };
-
-  useEffect(() => {
-    refreshList();
-    setVehiclesList(getVehicles());
-    setDriversList(getDrivers());
-  }, []);
 
   const handleOpenAdd = () => {
     setEditingRecord(null);
@@ -110,7 +102,7 @@ export default function FuelPage() {
     setIsOpen(true);
   };
 
-  const handleOpenEdit = (r: FuelRecord) => {
+  const handleOpenEdit = (r: any) => {
     setEditingRecord(r);
     setFormData({
       vehicle: r.vehicle,
@@ -126,7 +118,7 @@ export default function FuelPage() {
     setIsOpen(true);
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Auto-formatting rate/amount/quantity
@@ -144,18 +136,17 @@ export default function FuelPage() {
     };
 
     if (editingRecord) {
-      updateFuelRecord({
-        ...editingRecord,
-        ...finalRecord,
+      await updateFuel.mutateAsync({
+        id: editingRecord.id,
+        data: finalRecord as any,
       });
     } else {
-      addFuelRecord(finalRecord);
+      await createFuel.mutateAsync(finalRecord as any);
     }
     setIsOpen(false);
-    refreshList();
   };
 
-  const columns: ColumnDef<FuelRecord>[] = [
+  const columns: ColumnDef<any>[] = [
     { header: "Txn ID", accessorKey: "id", sortable: true },
     { header: "Vehicle", accessorKey: "vehicle", sortable: true },
     { header: "Date", accessorKey: "date", sortable: true },
@@ -183,10 +174,9 @@ export default function FuelPage() {
             variant="ghost"
             size="sm"
             className="h-7 text-xs rounded-lg text-red-500 hover:text-red-700 hover:bg-red-50 px-2"
-            onClick={() => {
+            onClick={async () => {
               if (confirm(`Are you sure you want to delete fuel txn ${row.id}?`)) {
-                deleteFuelRecord(row.id);
-                refreshList();
+                await deleteFuel.mutateAsync(row.id);
               }
             }}
           >

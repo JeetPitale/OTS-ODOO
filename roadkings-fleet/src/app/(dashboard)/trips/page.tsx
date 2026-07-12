@@ -7,14 +7,25 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Route, Clock, MapPin, Plus, Filter, Download, IndianRupee, X } from "lucide-react";
-import { getTrips, addTrip, updateTrip, deleteTrip, getDrivers, getVehicles, type Trip, type Driver, type Vehicle } from "@/lib/storage";
+import { useTrips, useCreateTrip, useUpdateTrip, useDeleteTrip } from "@/hooks/useTrips";
+import { useDrivers } from "@/hooks/useDrivers";
+import { useVehicles } from "@/hooks/useVehicles";
 
 export default function TripsPage() {
-  const [tripsList, setTripsList] = useState<Trip[]>([]);
-  const [driversList, setDriversList] = useState<Driver[]>([]);
-  const [vehiclesList, setVehiclesList] = useState<Vehicle[]>([]);
+  const { data: tripsData, isLoading } = useTrips({ limit: 100 });
+  const { data: driversData } = useDrivers({ limit: 100 });
+  const { data: vehiclesData } = useVehicles({ limit: 100 });
+
+  const createTrip = useCreateTrip();
+  const updateTrip = useUpdateTrip();
+  const deleteTrip = useDeleteTrip();
+
+  const tripsList = tripsData?.items || [];
+  const driversList = driversData?.items || [];
+  const vehiclesList = vehiclesData?.items || [];
+
   const [isOpen, setIsOpen] = useState(false);
-  const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
+  const [editingTrip, setEditingTrip] = useState<any>(null);
 
   const [formData, setFormData] = useState({
     origin: "",
@@ -28,42 +39,20 @@ export default function TripsPage() {
     startDate: new Date().toISOString().replace("T", " ").substring(0, 16),
   });
 
-  const [totals, setTotals] = useState({
-    activeTrips: 0,
+  const distSum = tripsList
+    .map((t) => parseInt(t.distance?.replace(/[^0-9]/g, "") || "0") || 0)
+    .reduce((a, b) => a + b, 0);
+
+  const revSum = tripsList
+    .map((t) => parseInt(t.revenue?.replace(/[^0-9]/g, "") || "0") || 0)
+    .reduce((a, b) => a + b, 0);
+
+  const totals = {
+    activeTrips: tripsList.filter((t) => t.status === "on_trip" || t.status === "on-trip").length,
     onTimeRate: "98.2%",
-    totalDistance: "0 km",
-    revenue: "₹0",
-  });
-
-  const refreshList = () => {
-    const list = getTrips();
-    setTripsList(list);
-
-    const activeTrips = list.filter((t) => t.status === "on-trip").length;
-    
-    // Calculate total distance dynamically
-    const distSum = list
-      .map((t) => parseInt(t.distance.replace(/[^0-9]/g, "")) || 0)
-      .reduce((a, b) => a + b, 0);
-      
-    // Calculate total revenue dynamically
-    const revSum = list
-      .map((t) => parseInt(t.revenue.replace(/[^0-9]/g, "")) || 0)
-      .reduce((a, b) => a + b, 0);
-
-    setTotals({
-      activeTrips,
-      onTimeRate: "98.2%",
-      totalDistance: `${distSum.toLocaleString()} km`,
-      revenue: `₹${(revSum / 1000).toFixed(1)}K`,
-    });
+    totalDistance: `${distSum.toLocaleString()} km`,
+    revenue: `₹${(revSum / 1000).toFixed(1)}K`,
   };
-
-  useEffect(() => {
-    refreshList();
-    setDriversList(getDrivers());
-    setVehiclesList(getVehicles());
-  }, []);
 
   const handleOpenAdd = () => {
     setEditingTrip(null);
@@ -81,7 +70,7 @@ export default function TripsPage() {
     setIsOpen(true);
   };
 
-  const handleOpenEdit = (t: Trip) => {
+  const handleOpenEdit = (t: any) => {
     setEditingTrip(t);
     setFormData({
       origin: t.origin,
@@ -97,22 +86,21 @@ export default function TripsPage() {
     setIsOpen(true);
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingTrip) {
-      updateTrip({
-        ...editingTrip,
-        ...formData,
+      await updateTrip.mutateAsync({
+        id: editingTrip.id,
+        data: formData,
       });
     } else {
-      addTrip(formData);
+      await createTrip.mutateAsync(formData);
     }
     setIsOpen(false);
-    refreshList();
   };
 
-  const columns: ColumnDef<Trip>[] = [
-    { header: "Trip ID", accessorKey: "id", sortable: true },
+  const columns: ColumnDef<any>[] = [
+    { header: "Trip ID", accessorKey: "tripId", sortable: true },
     {
       header: "Route",
       accessorKey: "origin",
@@ -128,7 +116,7 @@ export default function TripsPage() {
     {
       header: "Status",
       accessorKey: "status",
-      cell: (row) => <StatusBadge variant={row.status} />,
+      cell: (row) => <StatusBadge variant={row.status.replace("_", "-") as any} />,
     },
     { header: "Distance", accessorKey: "distance", sortable: true },
     { header: "ETA", accessorKey: "eta" },
@@ -151,10 +139,9 @@ export default function TripsPage() {
             variant="ghost"
             size="sm"
             className="h-7 text-xs rounded-lg text-red-500 hover:text-red-700 hover:bg-red-50 px-2"
-            onClick={() => {
-              if (confirm(`Are you sure you want to delete trip ${row.id}?`)) {
-                deleteTrip(row.id);
-                refreshList();
+            onClick={async () => {
+              if (confirm(`Are you sure you want to delete trip ${row.tripId || row.id}?`)) {
+                await deleteTrip.mutateAsync(row.id);
               }
             }}
           >

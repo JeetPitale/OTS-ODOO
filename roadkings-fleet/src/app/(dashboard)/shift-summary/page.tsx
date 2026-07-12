@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Header } from "@/components/shared";
+import { Header, StatusBadge } from "@/components/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Clock, Calendar, CheckSquare, ShieldCheck, MapPin } from "lucide-react";
-import { getDispatchHistory } from "@/lib/storage";
+import { useDispatches } from "@/hooks/useDispatches";
 
 export default function ShiftSummaryPage() {
+  const { data: dispatchesData, isLoading } = useDispatches({ limit: 100 });
+
+  
   const [summary, setSummary] = useState({
     shiftDate: "",
     shiftTime: "08:00 AM - 04:00 PM (General Shift)",
@@ -19,15 +22,16 @@ export default function ShiftSummaryPage() {
   const [shiftDispatches, setShiftDispatches] = useState<any[]>([]);
 
   useEffect(() => {
+    if (isLoading) return;
+
     const todayStr = new Date().toDateString();
-    const dispatches = getDispatchHistory();
-    const todayDispatches = dispatches.filter(
-      (d) => new Date(d.dispatchDate).toDateString() === todayStr || d.dispatchDate === new Date().toLocaleDateString()
+    const todayDispatches = (dispatchesData?.items || []).filter(
+      (d: any) => new Date(d.createdAt).toDateString() === todayStr
     );
 
-    const completed = todayDispatches.filter((d) => d.tripStatus === "completed").length;
-    const active = todayDispatches.filter((d) => d.tripStatus === "on-trip").length;
-    const cancelled = todayDispatches.filter((d) => d.tripStatus === "cancelled").length;
+    const completed = todayDispatches.filter((d: any) => d.tripStatus === "completed").length;
+    const active = todayDispatches.filter((d: any) => d.tripStatus === "on-trip").length;
+    const cancelled = todayDispatches.filter((d: any) => d.tripStatus === "cancelled").length;
 
     setSummary({
       shiftDate: new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
@@ -39,7 +43,7 @@ export default function ShiftSummaryPage() {
     });
 
     setShiftDispatches(todayDispatches);
-  }, []);
+  }, [dispatchesData?.items, isLoading]);
 
   return (
     <>
@@ -103,8 +107,9 @@ export default function ShiftSummaryPage() {
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
-                          {disp.dispatchId}
+                          {disp.tripId}
                         </span>
+                        <StatusBadge variant={disp.tripStatus.replace("_", "-") as any} />
                         <h4 className="font-semibold text-slate-800 flex items-center gap-1">
                           <MapPin className="h-3.5 w-3.5 text-muted-foreground" /> {disp.source} &rarr; {disp.destination}
                         </h4>
@@ -114,7 +119,7 @@ export default function ShiftSummaryPage() {
                       </p>
                     </div>
                     <div className="text-right text-xs text-muted-foreground flex md:flex-col items-center md:items-end justify-between md:justify-center gap-2">
-                      <span className="font-bold text-slate-700">{disp.dispatchTime}</span>
+                      <span className="font-bold text-slate-700">{new Date(disp.createdAt).toLocaleTimeString()}</span>
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                         disp.tripStatus === "completed" ? "bg-emerald-50 text-emerald-600 border border-emerald-200" :
                         disp.tripStatus === "on-trip" ? "bg-blue-50 text-blue-600 border border-blue-200" :

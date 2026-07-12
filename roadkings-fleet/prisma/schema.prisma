@@ -1,20 +1,13 @@
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 generator client {
   provider = "prisma-client-js"
 }
 
-model User {
-  id           String   @id @default(cuid())
-  name         String?
-  email        String   @unique
-  passwordHash String
-  role         Role     @default(FLEET_MANAGER)
-  createdAt    DateTime @default(now())
-}
+// ─── ENUMS ──────────────────────────────────────────────────────────────────────
 
 enum Role {
   ADMIN
@@ -24,4 +17,350 @@ enum Role {
   FINANCIAL_ANALYST
   DISPATCH_OPERATOR
   DISPATCH_MANAGER
+}
+
+enum DriverStatus {
+  available
+  on_trip
+  off_duty
+  suspended
+}
+
+enum VehicleStatus {
+  available
+  on_trip
+  in_maintenance
+  in_shop
+  retired
+}
+
+enum TripStatus {
+  scheduled
+  on_trip
+  completed
+  cancelled
+}
+
+enum DispatchStatus {
+  on_trip
+  completed
+  cancelled
+}
+
+enum MaintenanceType {
+  Preventive
+  Corrective
+}
+
+enum MaintenancePriority {
+  Critical
+  High
+  Medium
+  Low
+}
+
+enum MaintenanceStatus {
+  scheduled
+  in_maintenance
+  completed
+}
+
+enum NotificationType {
+  info
+  warning
+  success
+  critical
+}
+
+enum FuelType {
+  Diesel
+  Petrol
+  CNG
+  Electric
+}
+
+// ─── USER (existing — preserved) ────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  name         String?
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(FLEET_MANAGER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
+
+  activityLogs ActivityLog[]
+
+  @@index([role])
+}
+
+// ─── DRIVER ─────────────────────────────────────────────────────────────────────
+
+model Driver {
+  id              String       @id @default(cuid())
+  driverId        String       @unique // Human-readable ID like DRV-001
+  name            String
+  license         String
+  phone           String
+  status          DriverStatus @default(available)
+  safetyScore     Int          @default(90)
+  totalTrips      Int          @default(0)
+  incidents       Int          @default(0)
+  vehicle         String       @default("Unassigned")
+  licenseCategory String?
+  licenseExpiry   String?
+  photoUrl        String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @default(now()) @updatedAt
+
+  driverQR       DriverQR?
+  dispatches     Dispatch[]
+  scanLogs       QRScanLog[]
+  fuelRecords    FuelRecord[]
+
+  @@index([status])
+  @@index([driverId])
+  @@index([name])
+}
+
+// ─── VEHICLE ────────────────────────────────────────────────────────────────────
+
+model Vehicle {
+  id          String        @id @default(cuid())
+  vehicleId   String        @unique // Human-readable ID like V-001
+  number      String        @unique // Registration number
+  type        String
+  make        String
+  year        Int
+  status      VehicleStatus @default(available)
+  driver      String        @default("Unassigned")
+  lastService String
+  nextService String
+  mileage     String
+  capacityKg  Int?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @default(now()) @updatedAt
+
+  dispatches         Dispatch[]
+  maintenanceRecords MaintenanceRecord[]
+  fuelRecords        FuelRecord[]
+
+  @@index([status])
+  @@index([vehicleId])
+  @@index([number])
+}
+
+// ─── TRIP ───────────────────────────────────────────────────────────────────────
+
+model Trip {
+  id               String     @id @default(cuid())
+  tripId           String     @unique // Human-readable ID like TRP-1024
+  origin           String
+  destination      String
+  driver           String
+  vehicle          String
+  status           TripStatus @default(scheduled)
+  distance         String
+  eta              String
+  revenue          String
+  startDate        String
+  cargoDescription String?
+  cargoWeight      String?
+  dispatcher       String?
+  remarks          String?
+  dispatchId       String?
+  dispatchTime     String?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @default(now()) @updatedAt
+
+  @@index([status])
+  @@index([tripId])
+}
+
+// ─── DISPATCH ───────────────────────────────────────────────────────────────────
+
+model Dispatch {
+  id                   String         @id @default(cuid())
+  dispatchId           String         @unique // Human-readable ID like RK-...
+  tripId               String
+  driverId             String
+  driverName           String
+  vehicleId            String
+  vehicleRegistration  String
+  vehicleName          String
+  source               String
+  destination          String
+  cargoDescription     String
+  cargoWeight          String
+  dispatchDate         String
+  dispatchTime         String
+  dispatcher           String
+  tripStatus           DispatchStatus @default(on_trip)
+  expectedDelivery     String
+  distance             String
+  estimatedRevenue     String
+  remarks              String?
+  arrivalTime          String?
+  finalOdometer        String?
+  fuelUsed             String?
+  completionNotes      String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @default(now()) @updatedAt
+
+  driverRef  Driver  @relation(fields: [driverId], references: [driverId])
+  vehicleRef Vehicle @relation(fields: [vehicleId], references: [vehicleId])
+
+  dispatchQR DispatchQR?
+
+  @@index([tripStatus])
+  @@index([dispatchId])
+  @@index([driverId])
+  @@index([vehicleId])
+  @@index([createdAt])
+}
+
+// ─── DRIVER QR ──────────────────────────────────────────────────────────────────
+
+model DriverQR {
+  id        String   @id @default(cuid())
+  driverId  String   @unique
+  payload   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  driver Driver @relation(fields: [driverId], references: [driverId])
+}
+
+// ─── DISPATCH QR ────────────────────────────────────────────────────────────────
+
+model DispatchQR {
+  id         String   @id @default(cuid())
+  dispatchId String   @unique
+  payload    String
+  archived   Boolean  @default(false)
+  archivedAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  dispatch Dispatch @relation(fields: [dispatchId], references: [dispatchId])
+
+  @@index([archived])
+}
+
+// ─── QR SCAN LOG ────────────────────────────────────────────────────────────────
+
+model QRScanLog {
+  id         String   @id @default(cuid())
+  scanId     String   @unique // Human-readable ID like SCN-...
+  timestamp  DateTime @default(now())
+  driverId   String
+  driverName String
+  success    Boolean
+  message    String
+  createdAt  DateTime @default(now())
+
+  driverRef Driver? @relation(fields: [driverId], references: [driverId], onDelete: SetNull)
+
+  @@index([timestamp])
+  @@index([driverId])
+}
+
+// ─── NOTIFICATION ───────────────────────────────────────────────────────────────
+
+model Notification {
+  id        String           @id @default(cuid())
+  notifId   String           @unique // Human-readable ID like NOT-...
+  title     String
+  message   String
+  timestamp DateTime         @default(now())
+  type      NotificationType @default(info)
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([read])
+  @@index([timestamp])
+}
+
+// ─── MAINTENANCE RECORD ─────────────────────────────────────────────────────────
+
+model MaintenanceRecord {
+  id            String              @id @default(cuid())
+  maintenanceId String              @unique // Human-readable ID like MNT-401
+  vehicleId     String
+  vehicle       String              // Display name (registration number)
+  type          MaintenanceType
+  description   String
+  status        MaintenanceStatus   @default(scheduled)
+  priority      MaintenancePriority @default(Medium)
+  scheduledDate String
+  completedDate String
+  cost          String
+  technician    String
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @default(now()) @updatedAt
+
+  vehicleRef Vehicle @relation(fields: [vehicleId], references: [vehicleId])
+
+  @@index([status])
+  @@index([vehicleId])
+}
+
+// ─── FUEL RECORD ────────────────────────────────────────────────────────────────
+
+model FuelRecord {
+  id        String   @id @default(cuid())
+  fuelId    String   @unique // Human-readable ID like FUL-2201
+  vehicleId String
+  vehicle   String   // Display name (registration number)
+  date      String
+  station   String
+  fuelType  FuelType @default(Diesel)
+  quantity  String
+  rate      String
+  amount    String
+  odometer  String
+  driverId  String?
+  driver    String   // Display name
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  vehicleRef Vehicle  @relation(fields: [vehicleId], references: [vehicleId])
+  driverRef  Driver?  @relation(fields: [driverId], references: [driverId], onDelete: SetNull)
+
+  @@index([vehicleId])
+  @@index([driverId])
+  @@index([date])
+}
+
+// ─── ACTIVITY LOG ───────────────────────────────────────────────────────────────
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  entity    String   // e.g., "Driver", "Vehicle", "Trip"
+  entityId  String?
+  details   String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entity])
+  @@index([createdAt])
+}
+
+// ─── SETTING ────────────────────────────────────────────────────────────────────
+
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  group     String   @default("general")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([group])
 }

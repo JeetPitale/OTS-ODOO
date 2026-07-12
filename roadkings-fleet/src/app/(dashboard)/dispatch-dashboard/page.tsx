@@ -36,7 +36,10 @@ import {
   BarChart,
   Bar,
 } from "recharts";
-import { getDrivers, getVehicles, getTrips, getScanLogs, getDispatchHistory } from "@/lib/storage";
+import { useDrivers } from "@/hooks/useDrivers";
+import { useVehicles } from "@/hooks/useVehicles";
+import { useDispatches } from "@/hooks/useDispatches";
+import { useTrips } from "@/hooks/useTrips";
 
 interface DispatchAnalytics {
   dispatchTrend: { date: string; dispatches: number }[];
@@ -60,32 +63,33 @@ export default function DispatchDashboardPage() {
     vehicleUtilization: [],
   });
 
+  const { data: driversData } = useDrivers({ limit: 100 });
+  const { data: vehiclesData } = useVehicles({ limit: 100 });
+  const { data: dispatchesData } = useDispatches({ limit: 100 });
+
+  const drivers = driversData?.items || [];
+  const vehicles = vehiclesData?.items || [];
+  const dispatches = dispatchesData?.items || [];
+
   // Extracted into a reusable function so it can be called on mount, interval, and storage events
   const loadDashboardData = () => {
-    // 1. Fetch data from Local Storage
-    const drivers = getDrivers();
-    const vehicles = getVehicles();
-    const trips = getTrips();
-    const scanLogs = getScanLogs();
-    const dispatches = getDispatchHistory();
-
     const todayStr = new Date().toDateString();
 
     // 2. Compute KPIs
     const todayDispatches = dispatches.filter(
-      (d) => new Date(d.dispatchDate).toDateString() === todayStr || d.dispatchDate === new Date().toLocaleDateString()
+      (d: any) => new Date(d.createdAt).toDateString() === todayStr
     ).length;
 
-    const activeDispatches = dispatches.filter((d) => d.tripStatus === "on-trip").length;
-    const completedDispatches = dispatches.filter((d) => d.tripStatus === "completed").length;
-    const cancelledDispatches = dispatches.filter((d) => d.tripStatus === "cancelled").length;
+    const activeDispatches = dispatches.filter((d: any) => d.tripStatus === "on-trip").length;
+    const completedDispatches = dispatches.filter((d: any) => d.tripStatus === "completed").length;
+    const cancelledDispatches = dispatches.filter((d: any) => d.tripStatus === "cancelled").length;
 
-    const driversOnTrip = drivers.filter((d) => d.status === "on-trip").length;
-    const vehiclesOnTrip = vehicles.filter((v) => v.status === "on-trip").length;
+    const driversOnTrip = drivers.filter((d: any) => d.status === "on-trip").length;
+    const vehiclesOnTrip = vehicles.filter((v: any) => v.status === "on-trip").length;
 
     // QR generated today
     const dispatchQRsToday = dispatches.filter(
-      (d) => new Date(d.dispatchDate).toDateString() === todayStr || d.dispatchDate === new Date().toLocaleDateString()
+      (d: any) => new Date(d.createdAt).toDateString() === todayStr
     ).length;
 
     const qrGeneratedToday = dispatchQRsToday > 0 ? dispatchQRsToday : 3;
@@ -101,49 +105,39 @@ export default function DispatchDashboardPage() {
     });
 
     // 3. Set Recent Dispatches
-    const recent = dispatches.slice(0, 5).map((d) => ({
-      id: d.dispatchId,
+    const recent = dispatches.slice(0, 5).map((d: any) => ({
+      id: d.tripId,
       tripId: d.tripId,
       driverName: d.driverName,
       vehicleReg: d.vehicleRegistration,
       route: `${d.source} → ${d.destination}`,
       status: d.tripStatus,
-      time: d.dispatchTime,
-      date: d.dispatchDate,
+      time: new Date(d.createdAt).toLocaleTimeString(),
+      date: new Date(d.createdAt).toLocaleDateString(),
     }));
     setRecentDispatches(recent);
 
-    // 4. Compute / Load dispatchAnalytics from Local Storage
-    const localAnalytics = localStorage.getItem("dispatchAnalytics");
-    let parsedAnalytics: DispatchAnalytics;
+    const trend = [
+      { date: "Mon", dispatches: 12 },
+      { date: "Tue", dispatches: 19 },
+      { date: "Wed", dispatches: 15 },
+      { date: "Thu", dispatches: 22 },
+      { date: "Fri", dispatches: 30 },
+      { date: "Sat", dispatches: 18 },
+      { date: "Sun", dispatches: todayDispatches || 8 },
+    ];
 
-    if (localAnalytics) {
-      parsedAnalytics = JSON.parse(localAnalytics);
-    } else {
-      const trend = [
-        { date: "Mon", dispatches: 12 },
-        { date: "Tue", dispatches: 19 },
-        { date: "Wed", dispatches: 15 },
-        { date: "Thu", dispatches: 22 },
-        { date: "Fri", dispatches: 30 },
-        { date: "Sat", dispatches: 18 },
-        { date: "Sun", dispatches: todayDispatches || 8 },
-      ];
+    const utilization = [
+      { type: "Truck 16T", used: vehicles.filter(v => v.type.includes("16T") && v.status === "on_trip").length, total: vehicles.filter(v => v.type.includes("16T")).length || 4 },
+      { type: "Truck 12T", used: vehicles.filter(v => v.type.includes("12T") && v.status === "on_trip").length, total: vehicles.filter(v => v.type.includes("12T")).length || 3 },
+      { type: "Trailer 20T", used: vehicles.filter(v => v.type.includes("20T") && v.status === "on_trip").length, total: vehicles.filter(v => v.type.includes("20T")).length || 2 },
+      { type: "Mini Truck", used: vehicles.filter(v => v.type.includes("Mini") && v.status === "on_trip").length, total: vehicles.filter(v => v.type.includes("Mini")).length || 2 },
+    ];
 
-      const utilization = [
-        { type: "Truck 16T", used: vehicles.filter(v => v.type.includes("16T") && v.status === "on-trip").length, total: vehicles.filter(v => v.type.includes("16T")).length || 4 },
-        { type: "Truck 12T", used: vehicles.filter(v => v.type.includes("12T") && v.status === "on-trip").length, total: vehicles.filter(v => v.type.includes("12T")).length || 3 },
-        { type: "Trailer 20T", used: vehicles.filter(v => v.type.includes("20T") && v.status === "on-trip").length, total: vehicles.filter(v => v.type.includes("20T")).length || 2 },
-        { type: "Mini Truck", used: vehicles.filter(v => v.type.includes("Mini") && v.status === "on-trip").length, total: vehicles.filter(v => v.type.includes("Mini")).length || 2 },
-      ];
-
-      parsedAnalytics = {
-        dispatchTrend: trend,
-        vehicleUtilization: utilization,
-      };
-
-      localStorage.setItem("dispatchAnalytics", JSON.stringify(parsedAnalytics));
-    }
+    const parsedAnalytics: DispatchAnalytics = {
+      dispatchTrend: trend,
+      vehicleUtilization: utilization,
+    };
 
     // Update today's dispatches in trend
     if (parsedAnalytics.dispatchTrend && parsedAnalytics.dispatchTrend.length > 0) {
@@ -152,44 +146,21 @@ export default function DispatchDashboardPage() {
     
     // Recalculate live utilization
     parsedAnalytics.vehicleUtilization = [
-      { type: "Truck 16T", used: vehicles.filter(v => v.type.includes("16T") && v.status === "on-trip").length, total: vehicles.filter(v => v.type.includes("16T")).length || 4 },
-      { type: "Truck 12T", used: vehicles.filter(v => v.type.includes("12T") && v.status === "on-trip").length, total: vehicles.filter(v => v.type.includes("12T")).length || 3 },
-      { type: "Trailer 20T", used: vehicles.filter(v => v.type.includes("20T") && v.status === "on-trip").length, total: vehicles.filter(v => v.type.includes("20T")).length || 2 },
-      { type: "Mini Truck", used: vehicles.filter(v => v.type.includes("Mini") && v.status === "on-trip").length, total: vehicles.filter(v => v.type.includes("Mini")).length || 2 },
+      { type: "Truck 16T", used: vehicles.filter((v: any) => v.type.includes("16T") && v.status === "on_trip").length, total: vehicles.filter((v: any) => v.type.includes("16T")).length || 4 },
+      { type: "Truck 12T", used: vehicles.filter((v: any) => v.type.includes("12T") && v.status === "on_trip").length, total: vehicles.filter((v: any) => v.type.includes("12T")).length || 3 },
+      { type: "Trailer 20T", used: vehicles.filter((v: any) => v.type.includes("20T") && v.status === "on_trip").length, total: vehicles.filter((v: any) => v.type.includes("20T")).length || 2 },
+      { type: "Mini Truck", used: vehicles.filter((v: any) => v.type.includes("Mini") && v.status === "on_trip").length, total: vehicles.filter((v: any) => v.type.includes("Mini")).length || 2 },
     ];
 
     setAnalytics(parsedAnalytics);
 
-    // Initialize dispatchNotifications if empty
-    if (!localStorage.getItem("dispatchNotifications")) {
-      const initialNotifications = [
-        { id: "1", title: "New Dispatch Request", message: "Trip request TRP-1025 awaiting QR code generation.", time: "5 min ago", type: "info" },
-        { id: "2", title: "Driver Checked-In", message: "Amit Singh successfully verified via QR code.", time: "18 min ago", type: "success" },
-        { id: "3", title: "Delay Alert", message: "Vikas Meena reported heavy traffic on Pune highway.", time: "1h ago", type: "warning" },
-      ];
-      localStorage.setItem("dispatchNotifications", JSON.stringify(initialNotifications));
-    }
+
   };
 
   useEffect(() => {
     loadDashboardData();
-
-    // Auto-refresh every 30 seconds for live status updates
-    const interval = setInterval(loadDashboardData, 30000);
-
-    // Listen for cross-tab localStorage changes (e.g., dispatch created in Smart Dispatch tab)
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === "dispatchHistory" || e.key === "drivers" || e.key === "vehicles" || e.key === "trips") {
-        loadDashboardData();
-      }
-    };
-    window.addEventListener("storage", handleStorageChange);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener("storage", handleStorageChange);
-    };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drivers, vehicles, dispatches]);
 
   const kpiItems = [
     { title: "Today's Dispatches", value: kpis.todayDispatches, icon: Route, color: "border-l-orange-500 text-orange-600 bg-orange-500/5" },
@@ -425,7 +396,7 @@ export default function DispatchDashboardPage() {
                             {disp.date} · {disp.time}
                           </td>
                           <td className="py-3.5 text-right">
-                            <StatusBadge variant={disp.status} />
+                            <StatusBadge variant={disp.status.replace("_", "-") as any} />
                           </td>
                         </tr>
                       ))}

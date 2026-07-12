@@ -17,13 +17,12 @@ import {
   ShieldCheck,
   Calendar,
 } from "lucide-react";
-import { addNotification, getDispatchHistory, type DispatchRecord } from "@/lib/storage";
 
 function VerifyDispatchContent() {
   const searchParams = useSearchParams();
   const dispatchId = searchParams.get("id");
 
-  const [record, setRecord] = useState<DispatchRecord | null>(null);
+  const [record, setRecord] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -42,11 +41,14 @@ function VerifyDispatchContent() {
         }
         
         if (dispatchId) {
-          const history = getDispatchHistory();
-          const found = history.find((h) => h.dispatchId === dispatchId);
-          if (found) {
-            setRecord(found);
-            addNotification("QR Verified", `Dispatch QR ${found.dispatchId} was verified successfully.`, "success");
+          const res = await fetch(`/api/dispatches?search=${dispatchId}`);
+          if (res.ok) {
+            const data = await res.json();
+            const found = data.items.find((h: any) => h.tripId === dispatchId || h.id === dispatchId);
+            if (found) {
+              setRecord(found);
+              // Notification logic should be handled server-side or ignored for this public/auth view
+            }
           }
         }
         setLoading(false);
@@ -110,7 +112,7 @@ function VerifyDispatchContent() {
                     </div>
                   )}
                 </div>
-                <p className="text-lg font-bold text-slate-800 mt-3">{record.dispatchId}</p>
+                <p className="text-lg font-bold text-slate-800 mt-3">{record.tripId}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">Reference: {record.tripId}</p>
               </div>
 
@@ -179,13 +181,13 @@ function VerifyDispatchContent() {
                     <span className="text-muted-foreground flex items-center gap-1">
                       <Calendar className="h-3.5 w-3.5" /> Dispatch Date
                     </span>
-                    <span className="font-semibold text-slate-800">{record.dispatchDate}</span>
+                    <span className="font-semibold text-slate-800">{new Date(record.createdAt).toLocaleDateString()}</span>
                   </div>
                   <div className="flex justify-between items-center p-3">
                     <span className="text-muted-foreground flex items-center gap-1">
                       <Clock className="h-3.5 w-3.5" /> Dispatch Time
                     </span>
-                    <span className="font-semibold text-slate-800">{record.dispatchTime}</span>
+                    <span className="font-semibold text-slate-800">{new Date(record.createdAt).toLocaleTimeString()}</span>
                   </div>
                   {record.arrivalTime && (
                     <div className="flex justify-between items-center p-3 bg-blue-50/30">

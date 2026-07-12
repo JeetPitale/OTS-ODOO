@@ -29,7 +29,7 @@ import {
   BarChart,
   Bar,
 } from "recharts";
-import { getDrivers, getVehicles, getTrips, getScanLogs, getDispatchHistory } from "@/lib/storage";
+import { useDashboard } from "@/hooks/useDashboard";
 
 const tripTrendData = [
   { month: "Jan", trips: 980, revenue: 420 },
@@ -55,92 +55,48 @@ const staticAlerts = [
 ];
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState({
-    totalVehicles: 156,
-    activeTrips: 42,
-    activeDrivers: 89,
-    fuelCostMtd: "₹12.4L",
-    onTripVehicles: 42,
-    availableVehicles: 68,
-    inMaintenanceVehicles: 18,
-    otherVehicles: 28,
-  });
+  const { data: dashboard, isLoading, isError } = useDashboard();
 
-  const [qrStats, setQrStats] = useState({
-    scansToday: 0,
-    dispatchesToday: 0,
-    activeDispatches: 0,
-    completedDispatches: 0,
-  });
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <p className="text-muted-foreground animate-pulse">Loading dashboard...</p>
+      </div>
+    );
+  }
 
-  const [recentTripsList, setRecentTripsList] = useState<any[]>([]);
+  if (isError || !dashboard) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <p className="text-destructive">Failed to load dashboard data. Please try again.</p>
+      </div>
+    );
+  }
 
-  useEffect(() => {
-    // Read from storage
-    const drivers = getDrivers();
-    const vehicles = getVehicles();
-    const trips = getTrips();
-    const scanLogs = getScanLogs();
-    const dispatches = getDispatchHistory();
-
-    const activeTripsCount = trips.filter((t) => t.status === "on-trip").length;
-    const activeDriversCount = drivers.filter((d) => d.status === "available" || d.status === "on-trip").length;
-
-    // Vehicle status counts
-    const onTripV = vehicles.filter((v) => v.status === "on-trip").length;
-    const availableV = vehicles.filter((v) => v.status === "available").length;
-    const maintV = vehicles.filter((v) => v.status === "in-maintenance" || v.status === "in-shop").length;
-    const otherV = vehicles.filter((v) => v.status === "retired").length;
-
-    setStats({
-      totalVehicles: vehicles.length,
-      activeTrips: activeTripsCount,
-      activeDrivers: activeDriversCount,
-      fuelCostMtd: "₹12.4L",
-      onTripVehicles: onTripV,
-      availableVehicles: availableV,
-      inMaintenanceVehicles: maintV,
-      otherVehicles: otherV,
-    });
-
-    // QR Statistics
-    const todayStr = new Date().toDateString();
-    const scansToday = scanLogs.filter((l) => new Date(l.timestamp).toDateString() === todayStr).length;
-    const dispatchesToday = dispatches.filter((d) => new Date(d.dispatchDate).toDateString() === todayStr || d.dispatchDate === new Date().toLocaleDateString()).length;
-    const activeDispatches = dispatches.filter((d) => d.tripStatus === "on-trip").length;
-    const completedDispatches = dispatches.filter((d) => d.tripStatus === "completed").length;
-
-    setQrStats({
-      scansToday,
-      dispatchesToday,
-      activeDispatches,
-      completedDispatches,
-    });
-
-    // Map recent trips
-    const formattedTrips = trips.slice(0, 5).map((t) => ({
-      id: t.id,
-      route: `${t.origin} → ${t.destination}`,
-      driver: t.driver,
-      vehicle: t.vehicle,
-      status: t.status,
-      eta: t.eta,
-    }));
-    setRecentTripsList(formattedTrips);
-  }, []);
+  const stats = dashboard.kpis;
+  const qrStats = {
+    scansToday: stats.scansToday,
+    dispatchesToday: stats.dispatchesToday,
+    activeDispatches: stats.activeDispatches,
+    completedDispatches: stats.completedDispatches,
+  };
+  
+  const recentTripsList = dashboard.recentTrips.map(t => ({
+    id: t.tripId,
+    route: `${t.origin} → ${t.destination}`,
+    driver: t.driver,
+    vehicle: t.vehicle,
+    status: t.status,
+    eta: t.eta,
+  }));
+  
+  const fleetStatusData = dashboard.fleetStatus;
 
   const kpis = [
     { title: "Total Vehicles", value: stats.totalVehicles, icon: Truck, trend: { value: "+4 this month", direction: "up" as const } },
     { title: "Active Trips", value: stats.activeTrips, icon: Route, trend: { value: "12% vs last week", direction: "up" as const } },
     { title: "Active Drivers", value: stats.activeDrivers, icon: Users, trend: { value: "3 on leave", direction: "neutral" as const } },
-    { title: "Fuel Cost (MTD)", value: stats.fuelCostMtd, icon: Fuel, trend: { value: "8% below budget", direction: "down" as const } },
-  ];
-
-  const fleetStatusData = [
-    { name: "On Trip", value: stats.onTripVehicles, color: "#3b82f6" },
-    { name: "Available", value: stats.availableVehicles, color: "#10b981" },
-    { name: "In Maintenance", value: stats.inMaintenanceVehicles, color: "#f97316" },
-    { name: "Retired / Other", value: stats.otherVehicles, color: "#94a3b8" },
+    { title: "Fuel Cost (MTD)", value: stats.mtdFuelCost, icon: Fuel, trend: { value: "8% below budget", direction: "down" as const } },
   ];
 
   return (
@@ -333,7 +289,7 @@ export default function DashboardPage() {
                           {trip.eta}
                         </span>
                       )}
-                      <StatusBadge variant={trip.status} />
+                      <StatusBadge variant={trip.status.replace("_", "-") as any} />
                     </div>
                   </div>
                 ))}
@@ -352,20 +308,24 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {staticAlerts.map((alert, idx) => (
+              {dashboard.activeAlerts.length > 0 ? dashboard.activeAlerts.map((alert) => (
                 <div
-                  key={idx}
+                  key={alert.id}
                   className="flex items-center justify-between py-2 border-b border-border last:border-0"
                 >
                   <div className="flex items-center gap-3">
-                    <StatusBadge variant={alert.type} />
+                    <StatusBadge variant={alert.type as any} />
                     <p className="text-sm">{alert.message}</p>
                   </div>
                   <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    {alert.time}
+                    {new Date(alert.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
-              ))}
+              )) : (
+                <div className="py-4 text-center text-muted-foreground text-sm">
+                  No active alerts at the moment.
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

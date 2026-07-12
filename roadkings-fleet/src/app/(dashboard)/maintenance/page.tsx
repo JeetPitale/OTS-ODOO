@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Wrench, AlertTriangle, Clock, Plus, Filter, Download, IndianRupee, X } from "lucide-react";
-import { getMaintenanceRecords, addMaintenanceRecord, updateMaintenanceRecord, deleteMaintenanceRecord, getVehicles, type MaintenanceRecord, type Vehicle } from "@/lib/storage";
+import { useMaintenanceRecords, useCreateMaintenance, useUpdateMaintenance, useDeleteMaintenance } from "@/hooks/useMaintenance";
+import { useVehicles } from "@/hooks/useVehicles";
 
 function PriorityBadge({ priority }: { priority: string }) {
   const colors: Record<string, string> = {
@@ -24,10 +25,18 @@ function PriorityBadge({ priority }: { priority: string }) {
 }
 
 export default function MaintenancePage() {
-  const [recordsList, setRecordsList] = useState<MaintenanceRecord[]>([]);
-  const [vehiclesList, setVehiclesList] = useState<Vehicle[]>([]);
+  const { data: recordsData, isLoading } = useMaintenanceRecords({ limit: 100 });
+  const { data: vehiclesData } = useVehicles({ limit: 100 });
+
+  const createMaintenance = useCreateMaintenance();
+  const updateMaintenance = useUpdateMaintenance();
+  const deleteMaintenance = useDeleteMaintenance();
+
+  const recordsList = recordsData?.items || [];
+  const vehiclesList = vehiclesData?.items || [];
+  
   const [isOpen, setIsOpen] = useState(false);
-  const [editingRecord, setEditingRecord] = useState<MaintenanceRecord | null>(null);
+  const [editingRecord, setEditingRecord] = useState<any | null>(null);
 
   const [formData, setFormData] = useState({
     vehicle: "",
@@ -41,38 +50,21 @@ export default function MaintenancePage() {
     technician: "",
   });
 
-  const [totals, setTotals] = useState({
-    pendingJobs: 0,
-    inProgress: 0,
-    completed: 0,
-    totalCost: "₹0",
-  });
+  const pendingJobs = recordsList.filter((r) => r.status === "scheduled").length;
+  const inProgress = recordsList.filter((r) => r.status === "in_progress" || (r.status as any) === "in_maintenance" || (r.status as any) === "in-maintenance" || (r.status as any) === "in-shop").length;
+  const completed = recordsList.filter((r) => r.status === "completed").length;
 
-  const refreshList = () => {
-    const list = getMaintenanceRecords();
-    setRecordsList(list);
+  // Calculate total cost dynamically
+  const costSum = recordsList
+    .map((r) => parseInt(r.cost?.replace(/[^0-9]/g, "") || "0") || 0)
+    .reduce((a, b) => a + b, 0);
 
-    const pendingJobs = list.filter((r) => r.status === "scheduled").length;
-    const inProgress = list.filter((r) => r.status === "in-maintenance" || r.status === "in-shop").length;
-    const completed = list.filter((r) => r.status === "completed").length;
-
-    // Calculate total cost dynamically
-    const costSum = list
-      .map((r) => parseInt(r.cost.replace(/[^0-9]/g, "")) || 0)
-      .reduce((a, b) => a + b, 0);
-
-    setTotals({
-      pendingJobs,
-      inProgress,
-      completed,
-      totalCost: `₹${(costSum / 1000).toFixed(1)}K`,
-    });
+  const totals = {
+    pendingJobs,
+    inProgress,
+    completed,
+    totalCost: `₹${(costSum / 1000).toFixed(1)}K`,
   };
-
-  useEffect(() => {
-    refreshList();
-    setVehiclesList(getVehicles());
-  }, []);
 
   const handleOpenAdd = () => {
     setEditingRecord(null);
@@ -90,7 +82,7 @@ export default function MaintenancePage() {
     setIsOpen(true);
   };
 
-  const handleOpenEdit = (r: MaintenanceRecord) => {
+  const handleOpenEdit = (r: any) => {
     setEditingRecord(r);
     setFormData({
       vehicle: r.vehicle,
@@ -106,21 +98,20 @@ export default function MaintenancePage() {
     setIsOpen(true);
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingRecord) {
-      updateMaintenanceRecord({
-        ...editingRecord,
-        ...formData,
+      await updateMaintenance.mutateAsync({
+        id: editingRecord.id,
+        data: formData as any,
       });
     } else {
-      addMaintenanceRecord(formData);
+      await createMaintenance.mutateAsync(formData as any);
     }
     setIsOpen(false);
-    refreshList();
   };
 
-  const columns: ColumnDef<MaintenanceRecord>[] = [
+  const columns: ColumnDef<any>[] = [
     { header: "ID", accessorKey: "id", sortable: true },
     { header: "Vehicle", accessorKey: "vehicle", sortable: true },
     { header: "Type", accessorKey: "type", sortable: true },
@@ -128,7 +119,7 @@ export default function MaintenancePage() {
     {
       header: "Status",
       accessorKey: "status",
-      cell: (row) => <StatusBadge variant={row.status} />,
+      cell: (row) => <StatusBadge variant={row.status.replace("_", "-") as any} />,
     },
     {
       header: "Priority",
@@ -156,10 +147,9 @@ export default function MaintenancePage() {
             variant="ghost"
             size="sm"
             className="h-7 text-xs rounded-lg text-red-500 hover:text-red-700 hover:bg-red-50 px-2"
-            onClick={() => {
+            onClick={async () => {
               if (confirm(`Are you sure you want to delete record ${row.id}?`)) {
-                deleteMaintenanceRecord(row.id);
-                refreshList();
+                await deleteMaintenance.mutateAsync(row.id);
               }
             }}
           >

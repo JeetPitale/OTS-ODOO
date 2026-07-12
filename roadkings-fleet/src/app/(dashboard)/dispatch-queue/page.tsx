@@ -5,20 +5,16 @@ import { Header, StatusBadge } from "@/components/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ListTodo, Play, ArrowRight, Clock, AlertCircle } from "lucide-react";
-import { getTrips } from "@/lib/storage";
+import { useTrips } from "@/hooks/useTrips";
 import Link from "next/link";
 
 export default function DispatchQueuePage() {
-  const [queuedTrips, setQueuedTrips] = useState<any[]>([]);
-
-  useEffect(() => {
-    // Get trips from local storage that are scheduled or not yet active
-    const trips = getTrips();
-    const scheduled = trips.filter(
-      (t) => t.status === "scheduled" || t.status === "pending" || t.status === "available"
-    );
-    setQueuedTrips(scheduled);
-  }, []);
+  const { data: tripsData, isLoading } = useTrips({ limit: 100 });
+  const trips = tripsData?.items || [];
+  
+  const queuedTrips = trips.filter(
+    (t: any) => t.status === "scheduled" || t.status === "pending" || t.status === "available"
+  );
 
   return (
     <>
@@ -67,7 +63,7 @@ export default function DispatchQueuePage() {
                     </div>
                     
                     <div className="flex items-center gap-3">
-                      <StatusBadge variant={trip.status} />
+                      <StatusBadge variant={trip.status.replace("_", "-") as any} />
                       <Link href={`/smart-dispatch?tripId=${trip.id}`}>
                         <Button size="sm" className="h-9 px-3 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-bold flex items-center gap-1">
                           <Play className="h-3.5 w-3.5 fill-current" /> Dispatch Now

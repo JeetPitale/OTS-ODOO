@@ -5,33 +5,32 @@ import { Header, StatusBadge } from "@/components/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Activity, Clock, ShieldAlert, CheckCircle, XCircle } from "lucide-react";
-import { getDispatchHistory, completeTrip, cancelTrip } from "@/lib/storage";
+import { useDispatches, useCompleteDispatch, useCancelDispatch } from "@/hooks/useDispatches";
 
 export default function ActiveDispatchesPage() {
-  const [activeDispatches, setActiveDispatches] = useState<any[]>([]);
+  const { data: dispatchesData, isLoading } = useDispatches({ limit: 100 });
+  const completeDispatch = useCompleteDispatch();
+  const cancelDispatch = useCancelDispatch();
 
-  const loadActive = () => {
-    const dispatches = getDispatchHistory();
-    const active = dispatches.filter((d) => d.tripStatus === "on-trip");
-    setActiveDispatches(active);
-  };
+  const activeDispatches = (dispatchesData?.items || []).filter((d: any) => d.tripStatus === "on-trip");
 
-  useEffect(() => {
-    loadActive();
-  }, []);
-
-  const handleComplete = (dispatchId: string) => {
+  const handleComplete = async (dispatchId: string) => {
     // Prompt for simplified inputs or use standard completion values
     const odometer = prompt("Enter final odometer reading (km):", "46000");
     if (odometer === null) return;
-    completeTrip(dispatchId, odometer, "60L", "Successfully completed trip.");
-    loadActive();
+    await completeDispatch.mutateAsync({
+      id: dispatchId,
+      data: {
+        odometer: odometer,
+        fuel: "60L",
+        notes: "Successfully completed trip."
+      }
+    });
   };
 
-  const handleCancel = (dispatchId: string) => {
+  const handleCancel = async (dispatchId: string) => {
     if (confirm("Are you sure you want to cancel this dispatch?")) {
-      cancelTrip(dispatchId);
-      loadActive();
+      await cancelDispatch.mutateAsync(dispatchId);
     }
   };
 
@@ -55,13 +54,13 @@ export default function ActiveDispatchesPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                {activeDispatches.map((disp) => (
-                  <Card key={disp.dispatchId} className="rounded-xl border border-border bg-slate-50 shadow-none hover:border-slate-300 transition-colors">
+                {activeDispatches.map((disp: any) => (
+                  <Card key={disp.id} className="rounded-xl border border-border bg-slate-50 shadow-none hover:border-slate-300 transition-colors">
                     <CardContent className="p-5 space-y-4">
                       <div className="flex items-center justify-between">
                         <div>
                           <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                            {disp.dispatchId}
+                            {disp.tripId}
                           </span>
                           <span className="text-xs text-muted-foreground ml-2 font-medium">
                             Trip: {disp.tripId}
@@ -91,21 +90,21 @@ export default function ActiveDispatchesPage() {
 
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" /> Dispatched: {disp.dispatchDate} {disp.dispatchTime}
+                          <Clock className="h-3 w-3" /> Dispatched: {new Date(disp.createdAt).toLocaleDateString()} {new Date(disp.createdAt).toLocaleTimeString()}
                         </span>
                         <span>ETA: {disp.expectedDelivery}</span>
                       </div>
 
                       <div className="flex gap-2 pt-2">
                         <Button
-                          onClick={() => handleComplete(disp.dispatchId)}
+                          onClick={() => handleComplete(disp.id)}
                           size="sm"
                           className="flex-1 h-9 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center justify-center gap-1 shadow-sm shadow-emerald-500/10"
                         >
                           <CheckCircle className="h-3.5 w-3.5" /> Complete Trip
                         </Button>
                         <Button
-                          onClick={() => handleCancel(disp.dispatchId)}
+                          onClick={() => handleCancel(disp.id)}
                           variant="outline"
                           size="sm"
                           className="h-9 rounded-lg border-red-200 text-red-600 hover:bg-red-50 font-semibold"

@@ -34,19 +34,10 @@ import {
 } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 import { Html5QrcodeScanner, Html5Qrcode } from "html5-qrcode";
-import {
-  getDrivers,
-  getVehicles,
-  getDispatchHistory,
-  createDispatch,
-  createDispatchQRPayload,
-  completeTrip,
-  cancelTrip,
-  addScanLog,
-  type Driver,
-  type Vehicle,
-  type DispatchRecord,
-} from "@/lib/storage";
+import { useDrivers } from "@/hooks/useDrivers";
+import { useVehicles } from "@/hooks/useVehicles";
+import { useDispatches, useCreateDispatch, useCompleteDispatch, useCancelDispatch } from "@/hooks/useDispatches";
+import { useLogQRScan } from "@/hooks/useQR";
 
 interface DispatchFormData {
   tripId: string;
@@ -65,12 +56,21 @@ interface DispatchFormData {
 
 export default function SmartDispatchPage() {
   const [activeTab, setActiveTab] = useState("smart-dispatch");
-  const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [dispatchHistory, setDispatchHistory] = useState<DispatchRecord[]>([]);
+  const { data: driversData } = useDrivers({ limit: 100 });
+  const { data: vehiclesData } = useVehicles({ limit: 100 });
+  const { data: dispatchesData } = useDispatches({ limit: 100 });
+
+  const createDispatch = useCreateDispatch();
+  const completeDispatch = useCompleteDispatch();
+  const cancelDispatch = useCancelDispatch();
+  const logScan = useLogQRScan();
+
+  const drivers = driversData?.items || [];
+  const vehicles = vehiclesData?.items || [];
+  const dispatchHistory = dispatchesData?.items || [];
 
   // Scanning State
-  const [scannedDriver, setScannedDriver] = useState<Driver | null>(null);
+  const [scannedDriver, setScannedDriver] = useState<any | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanSuccess, setScanSuccess] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -82,7 +82,7 @@ export default function SmartDispatchPage() {
 
   // Modals
   const [showPassModal, setShowPassModal] = useState(false);
-  const [currentPass, setCurrentPass] = useState<DispatchRecord | null>(null);
+  const [currentPass, setCurrentPass] = useState<any | null>(null);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [completeDispatchId, setCompleteDispatchId] = useState<string | null>(null);
 
@@ -130,11 +130,7 @@ export default function SmartDispatchPage() {
 
   const [checkingAuth, setCheckingAuth] = useState(true);
 
-  const loadData = () => {
-    setDrivers(getDrivers());
-    setVehicles(getVehicles());
-    setDispatchHistory(getDispatchHistory());
-  };
+  // Removed legacy loadData
 
   useEffect(() => {
     async function checkRole() {
@@ -150,7 +146,7 @@ export default function SmartDispatchPage() {
           window.location.href = "/unauthorized";
           return;
         }
-        loadData();
+        // loadData is handled by hooks
         setCheckingAuth(false);
       } catch {
         window.location.href = "/unauthorized";
@@ -234,7 +230,7 @@ export default function SmartDispatchPage() {
     if (!found) {
       playBeep(330, 0.3); // Low buzzer error sound
       setScanError("Driver ID not recognized in database.");
-      addScanLog(id, "Unknown", false, "Driver ID not recognized");
+      logScan.mutate({ driverId: id, driverName: "Unknown", success: false, message: "Driver ID not recognized" });
       return;
     }
 
@@ -242,7 +238,7 @@ export default function SmartDispatchPage() {
     playBeep(880, 0.15);
     setScannedDriver(found);
     setScanSuccess(true);
-    addScanLog(found.id, found.name, true, "Driver verified successfully");
+    logScan.mutate({ driverId: found.id, driverName: found.name, success: true, message: "Driver verified successfully" });
 
     // Automatically check verification constraints
     const errorsList: string[] = [];
@@ -358,15 +354,14 @@ export default function SmartDispatchPage() {
   };
 
   // Confirm dispatch from Summary Dialog
-  const handleConfirmDispatch = () => {
+  const handleConfirmDispatch = async () => {
     if (!scannedDriver || !pendingDispatchData) return;
     const data = pendingDispatchData;
     const selectedVehicle = vehicles.find((v) => v.id === data.vehicleId);
     if (!selectedVehicle) return;
 
-    let fullRecord: DispatchRecord;
     try {
-      fullRecord = createDispatch({
+      const fullRecord = await createDispatch.mutateAsync({
         tripId: data.tripId,
         driverId: scannedDriver.id,
         driverName: scannedDriver.name,
@@ -383,26 +378,24 @@ export default function SmartDispatchPage() {
         estimatedRevenue: data.estimatedRevenue,
         remarks: data.remarks,
       });
-    } catch (error) {
-      setValidationErrors([error instanceof Error ? error.message : "Unable to create dispatch."]);
+      
+      playBeep(1200, 0.25);
+      setShowSummaryModal(false);
+      setPendingDispatchData(null);
+      setCurrentPass(fullRecord as any);
+      setShowPassModal(true);
+  
+      // Reset Scanner & Form
+      setScannedDriver(null);
+      setScanSuccess(false);
+      setDriverConfirmed(false);
+    } catch (error: any) {
+      setValidationErrors([error.message || "Unable to create dispatch."]);
       setShowSummaryModal(false);
       setPendingDispatchData(null);
       playBeep(330, 0.3);
-      loadData();
       return;
     }
-
-    playBeep(1200, 0.25);
-    setShowSummaryModal(false);
-    setPendingDispatchData(null);
-    setCurrentPass(fullRecord);
-    setShowPassModal(true);
-
-    // Reset Scanner & Form
-    setScannedDriver(null);
-    setScanSuccess(false);
-    setDriverConfirmed(false);
-    loadData();
   };
 
   // Complete Trip process
@@ -411,7 +404,7 @@ export default function SmartDispatchPage() {
     setShowCompleteModal(true);
   };
 
-  const handleConfirmComplete = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleConfirmComplete = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!completeDispatchId) return;
 
@@ -420,17 +413,22 @@ export default function SmartDispatchPage() {
     const fuel = data.get("fuel") as string;
     const notes = data.get("notes") as string;
 
-    completeTrip(completeDispatchId, odometer, fuel, notes);
+    await completeDispatch.mutateAsync({
+      id: completeDispatchId,
+      data: {
+        finalOdometer: odometer,
+        fuelUsed: fuel,
+        completionNotes: notes,
+      },
+    });
     playBeep(880, 0.15);
     setShowCompleteModal(false);
-    loadData();
   };
 
-  const handleCancelTrip = (dispatchId: string) => {
+  const handleCancelTrip = async (dispatchId: string) => {
     if (confirm("Are you sure you want to cancel this trip dispatch?")) {
-      cancelTrip(dispatchId);
+      await cancelDispatch.mutateAsync(dispatchId);
       playBeep(440, 0.2);
-      loadData();
     }
   };
 
@@ -734,7 +732,7 @@ export default function SmartDispatchPage() {
                         <div className="space-y-0.5">
                           <div className="flex items-center gap-2">
                             <h3 className="font-bold text-sm text-foreground">{scannedDriver.name}</h3>
-                            <StatusBadge variant={scannedDriver.status} />
+                            <StatusBadge variant={scannedDriver.status.replace("_", "-") as any} />
                           </div>
                           <p className="text-xs text-muted-foreground">ID: {scannedDriver.id} · Phone: {scannedDriver.phone}</p>
                           <div className="flex items-center gap-3 mt-1.5">
@@ -1104,7 +1102,7 @@ export default function SmartDispatchPage() {
                           <td className="px-4 py-3 font-medium text-slate-700">{item.source} → {item.destination}</td>
                           <td className="px-4 py-3 text-muted-foreground">{item.dispatchDate} {item.dispatchTime}</td>
                           <td className="px-4 py-3">
-                            <StatusBadge variant={item.tripStatus as StatusVariant} />
+                            <StatusBadge variant={item.tripStatus.replace("_", "-") as any} />
                           </td>
                           <td className="px-4 py-3 text-right space-x-1.5 whitespace-nowrap">
                             <Button
@@ -1242,14 +1240,21 @@ export default function SmartDispatchPage() {
                   </div>
 
                   <div className="bg-slate-50 p-2.5 border border-slate-200/50 rounded-xl relative shadow-inner">
-                    {/* Render Canvas QR Code */}
-                    <QRCodeCanvas
-                      id={`pass-qr-${currentPass.dispatchId}`}
-                      value={createDispatchQRPayload(currentPass)}
-                      size={120}
-                      level="Q"
-                      includeMargin={true}
-                    />
+                    <div className="bg-white p-2 rounded-xl">
+                      <QRCodeCanvas
+                        id={`pass-qr-${currentPass.dispatchId}`}
+                        value={JSON.stringify({
+                          dispatchId: currentPass.dispatchId,
+                          driverId: currentPass.driverId,
+                          vehicleReg: currentPass.vehicleRegistration,
+                          timestamp: new Date().toISOString(),
+                        })}
+                        size={140}
+                        bgColor={"#ffffff"}
+                        fgColor={"#000000"}
+                        level={"Q"}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
