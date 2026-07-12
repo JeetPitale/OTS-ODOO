@@ -63,7 +63,7 @@ export interface DispatchRecord {
   dispatchDate: string;
   dispatchTime: string;
   dispatcher: string;
-  tripStatus: string;
+  tripStatus: StatusVariant;
   expectedDelivery: string;
   distance: string;
   estimatedRevenue: string;
