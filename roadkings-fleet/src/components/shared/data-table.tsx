@@ -72,7 +72,7 @@ export function DataTable<T>({
             placeholder={searchPlaceholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 rounded-lg"
+            className="pl-9 rounded-lg h-9 text-xs"
           />
         </div>
       )}
@@ -83,7 +83,7 @@ export function DataTable<T>({
               {columns.map((col) => (
                 <TableHead
                   key={String(col.accessorKey)}
-                  className={`text-xs uppercase tracking-wide font-semibold text-muted-foreground ${
+                  className={`px-4 py-3 text-[10px] tracking-wider uppercase font-bold text-slate-500 border-b border-border/60 ${
                     col.sortable ? "cursor-pointer select-none" : ""
                   }`}
                   onClick={() => col.sortable && handleSort(col.accessorKey)}
@@ -114,9 +114,9 @@ export function DataTable<T>({
               </TableRow>
             ) : (
               sorted.map((row, idx) => (
-                <TableRow key={idx} className="hover:bg-muted/30 transition-colors">
+                <TableRow key={idx} className="hover:bg-muted/40 transition-colors">
                   {columns.map((col) => (
-                    <TableCell key={String(col.accessorKey)} className="py-3">
+                    <TableCell key={String(col.accessorKey)} className="px-4 py-3">
                       {col.cell ? col.cell(row) : String(row[col.accessorKey])}
                     </TableCell>
                   ))}

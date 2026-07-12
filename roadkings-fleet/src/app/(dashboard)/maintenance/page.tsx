@@ -76,7 +76,7 @@ export default function MaintenancePage() {
           <KpiCard title="Total Cost (MTD)" value="₹2.8L" icon={IndianRupee} iconBgClass="bg-amber-50" trend={{ value: "12% under budget", direction: "up" }} />
         </div>
 
-        <Card className="rounded-xl ambient-shadow border-0">
+        <Card className="rounded-xl ambient-shadow border-0 ring-0">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-primary" />

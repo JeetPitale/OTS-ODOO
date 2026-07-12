@@ -108,7 +108,7 @@ export default function ReportsPage() {
           {/* Revenue Tab */}
           <TabsContent value="revenue" className="space-y-4">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <Card className="rounded-xl ambient-shadow border-0">
+              <Card className="rounded-xl ambient-shadow border-0 ring-0">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-semibold flex items-center gap-2">
                     <BarChart3 className="h-4 w-4 text-primary" />
@@ -128,7 +128,7 @@ export default function ReportsPage() {
                 </CardContent>
               </Card>
 
-              <Card className="rounded-xl ambient-shadow border-0">
+              <Card className="rounded-xl ambient-shadow border-0 ring-0">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-semibold">Top Routes by Revenue</CardTitle>
                 </CardHeader>
@@ -157,7 +157,7 @@ export default function ReportsPage() {
           {/* Fleet Tab */}
           <TabsContent value="fleet" className="space-y-4">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <Card className="rounded-xl ambient-shadow border-0">
+              <Card className="rounded-xl ambient-shadow border-0 ring-0">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-semibold">Vehicle Utilization Breakdown</CardTitle>
                 </CardHeader>
@@ -192,7 +192,7 @@ export default function ReportsPage() {
                 </CardContent>
               </Card>
 
-              <Card className="rounded-xl ambient-shadow border-0">
+              <Card className="rounded-xl ambient-shadow border-0 ring-0">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-semibold">Trip Volume Trend</CardTitle>
                 </CardHeader>
@@ -219,7 +219,7 @@ export default function ReportsPage() {
 
           {/* Drivers Tab */}
           <TabsContent value="drivers" className="space-y-4">
-            <Card className="rounded-xl ambient-shadow border-0">
+            <Card className="rounded-xl ambient-shadow border-0 ring-0">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold">Driver Performance Comparison (Radar)</CardTitle>
               </CardHeader>
@@ -239,7 +239,7 @@ export default function ReportsPage() {
 
           {/* Costs Tab */}
           <TabsContent value="costs" className="space-y-4">
-            <Card className="rounded-xl ambient-shadow border-0">
+            <Card className="rounded-xl ambient-shadow border-0 ring-0">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold">Cost Breakdown (MTD)</CardTitle>
               </CardHeader>

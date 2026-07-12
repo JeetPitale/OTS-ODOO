@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Header, KpiCard, StatusBadge } from "@/components/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -11,6 +12,8 @@ import {
   TrendingUp,
   MapPin,
   Clock,
+  QrCode,
+  CheckCircle,
 } from "lucide-react";
 import {
   AreaChart,
@@ -26,14 +29,7 @@ import {
   BarChart,
   Bar,
 } from "recharts";
-import type { StatusVariant } from "@/lib/status-colors";
-
-const kpis = [
-  { title: "Total Vehicles", value: 156, icon: Truck, trend: { value: "+4 this month", direction: "up" as const } },
-  { title: "Active Trips", value: 42, icon: Route, trend: { value: "12% vs last week", direction: "up" as const } },
-  { title: "Active Drivers", value: 89, icon: Users, trend: { value: "3 on leave", direction: "neutral" as const } },
-  { title: "Fuel Cost (MTD)", value: "₹12.4L", icon: Fuel, trend: { value: "8% below budget", direction: "down" as const } },
-];
+import { getDrivers, getVehicles, getTrips, getScanLogs, getDispatchHistory } from "@/lib/storage";
 
 const tripTrendData = [
   { month: "Jan", trips: 980, revenue: 420 },
@@ -44,13 +40,6 @@ const tripTrendData = [
   { month: "Jun", trips: 1320, revenue: 590 },
 ];
 
-const fleetStatusData = [
-  { name: "On Trip", value: 42, color: "#3b82f6" },
-  { name: "Available", value: 68, color: "#10b981" },
-  { name: "In Maintenance", value: 18, color: "#f97316" },
-  { name: "Off Duty", value: 28, color: "#94a3b8" },
-];
-
 const fuelByWeek = [
   { week: "W1", diesel: 32000, petrol: 8000 },
   { week: "W2", diesel: 29000, petrol: 7200 },
@@ -58,22 +47,102 @@ const fuelByWeek = [
   { week: "W4", diesel: 31000, petrol: 8500 },
 ];
 
-const recentTrips: { id: string; route: string; driver: string; vehicle: string; status: StatusVariant; eta: string }[] = [
-  { id: "TRP-1024", route: "Mumbai → Pune", driver: "Rajesh Kumar", vehicle: "MH-04 AB 1234", status: "on-trip", eta: "2h 15m" },
-  { id: "TRP-1023", route: "Delhi → Jaipur", driver: "Amit Singh", vehicle: "DL-01 CD 5678", status: "completed", eta: "—" },
-  { id: "TRP-1022", route: "Bangalore → Chennai", driver: "Suresh Reddy", vehicle: "KA-01 EF 9012", status: "on-trip", eta: "4h 30m" },
-  { id: "TRP-1021", route: "Hyderabad → Vizag", driver: "Mohan Rao", vehicle: "TS-09 GH 3456", status: "scheduled", eta: "—" },
-  { id: "TRP-1020", route: "Kolkata → Bhubaneswar", driver: "Debashis Das", vehicle: "WB-06 IJ 7890", status: "completed", eta: "—" },
-];
-
-const alerts: { message: string; type: StatusVariant; time: string }[] = [
-  { message: "Vehicle MH-12 XY 4567 overdue for service (350 km past)", type: "critical", time: "12 min ago" },
-  { message: "Driver Pradeep Sharma exceeded speed limit on NH-48", type: "warning", time: "35 min ago" },
-  { message: "Fuel card declined for vehicle DL-08 QR 2345", type: "critical", time: "1h ago" },
-  { message: "Trip TRP-1019 delayed — flat tyre near Nashik", type: "warning", time: "2h ago" },
+const staticAlerts = [
+  { message: "Vehicle MH-12 XY 4567 overdue for service (350 km past)", type: "critical" as const, time: "12 min ago" },
+  { message: "Driver Pradeep Sharma exceeded speed limit on NH-48", type: "warning" as const, time: "35 min ago" },
+  { message: "Fuel card declined for vehicle DL-08 QR 2345", type: "critical" as const, time: "1h ago" },
+  { message: "Trip TRP-1019 delayed — flat tyre near Nashik", type: "warning" as const, time: "2h ago" },
 ];
 
 export default function DashboardPage() {
+  const [stats, setStats] = useState({
+    totalVehicles: 156,
+    activeTrips: 42,
+    activeDrivers: 89,
+    fuelCostMtd: "₹12.4L",
+    onTripVehicles: 42,
+    availableVehicles: 68,
+    inMaintenanceVehicles: 18,
+    otherVehicles: 28,
+  });
+
+  const [qrStats, setQrStats] = useState({
+    scansToday: 0,
+    dispatchesToday: 0,
+    activeDispatches: 0,
+    completedDispatches: 0,
+  });
+
+  const [recentTripsList, setRecentTripsList] = useState<any[]>([]);
+
+  useEffect(() => {
+    // Read from storage
+    const drivers = getDrivers();
+    const vehicles = getVehicles();
+    const trips = getTrips();
+    const scanLogs = getScanLogs();
+    const dispatches = getDispatchHistory();
+
+    const activeTripsCount = trips.filter((t) => t.status === "on-trip").length;
+    const activeDriversCount = drivers.filter((d) => d.status === "available" || d.status === "on-trip").length;
+
+    // Vehicle status counts
+    const onTripV = vehicles.filter((v) => v.status === "on-trip").length;
+    const availableV = vehicles.filter((v) => v.status === "available").length;
+    const maintV = vehicles.filter((v) => v.status === "in-maintenance" || v.status === "in-shop").length;
+    const otherV = vehicles.filter((v) => v.status === "retired").length;
+
+    setStats({
+      totalVehicles: vehicles.length,
+      activeTrips: activeTripsCount,
+      activeDrivers: activeDriversCount,
+      fuelCostMtd: "₹12.4L",
+      onTripVehicles: onTripV,
+      availableVehicles: availableV,
+      inMaintenanceVehicles: maintV,
+      otherVehicles: otherV,
+    });
+
+    // QR Statistics
+    const todayStr = new Date().toDateString();
+    const scansToday = scanLogs.filter((l) => new Date(l.timestamp).toDateString() === todayStr).length;
+    const dispatchesToday = dispatches.filter((d) => new Date(d.dispatchDate).toDateString() === todayStr || d.dispatchDate === new Date().toLocaleDateString()).length;
+    const activeDispatches = dispatches.filter((d) => d.tripStatus === "on-trip").length;
+    const completedDispatches = dispatches.filter((d) => d.tripStatus === "completed").length;
+
+    setQrStats({
+      scansToday,
+      dispatchesToday,
+      activeDispatches,
+      completedDispatches,
+    });
+
+    // Map recent trips
+    const formattedTrips = trips.slice(0, 5).map((t) => ({
+      id: t.id,
+      route: `${t.origin} → ${t.destination}`,
+      driver: t.driver,
+      vehicle: t.vehicle,
+      status: t.status,
+      eta: t.eta,
+    }));
+    setRecentTripsList(formattedTrips);
+  }, []);
+
+  const kpis = [
+    { title: "Total Vehicles", value: stats.totalVehicles, icon: Truck, trend: { value: "+4 this month", direction: "up" as const } },
+    { title: "Active Trips", value: stats.activeTrips, icon: Route, trend: { value: "12% vs last week", direction: "up" as const } },
+    { title: "Active Drivers", value: stats.activeDrivers, icon: Users, trend: { value: "3 on leave", direction: "neutral" as const } },
+    { title: "Fuel Cost (MTD)", value: stats.fuelCostMtd, icon: Fuel, trend: { value: "8% below budget", direction: "down" as const } },
+  ];
+
+  const fleetStatusData = [
+    { name: "On Trip", value: stats.onTripVehicles, color: "#3b82f6" },
+    { name: "Available", value: stats.availableVehicles, color: "#10b981" },
+    { name: "In Maintenance", value: stats.inMaintenanceVehicles, color: "#f97316" },
+    { name: "Retired / Other", value: stats.otherVehicles, color: "#94a3b8" },
+  ];
+
   return (
     <>
       <Header title="Dashboard" subtitle="Fleet operations overview" />
@@ -85,10 +154,58 @@ export default function DashboardPage() {
           ))}
         </div>
 
+        {/* QR Scan Statistics Card (Smart Dispatch metrics) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className="rounded-xl border-y-0 border-r-0 border-l-4 border-l-primary ring-0 bg-gradient-to-br from-amber-500/10 to-orange-500/10 shadow-sm">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">QR Scans Today</p>
+                <p className="text-2xl font-bold mt-1 text-foreground">{qrStats.scansToday}</p>
+              </div>
+              <div className="p-2.5 bg-primary/10 rounded-lg text-primary">
+                <QrCode className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="rounded-xl border-y-0 border-r-0 border-l-4 border-l-primary ring-0 bg-gradient-to-br from-amber-500/10 to-orange-500/10 shadow-sm">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Dispatches Today</p>
+                <p className="text-2xl font-bold mt-1 text-foreground">{qrStats.dispatchesToday}</p>
+              </div>
+              <div className="p-2.5 bg-primary/10 rounded-lg text-primary">
+                <Truck className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="rounded-xl border-y-0 border-r-0 border-l-4 border-l-primary ring-0 bg-gradient-to-br from-amber-500/10 to-orange-500/10 shadow-sm">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Active Dispatches</p>
+                <p className="text-2xl font-bold mt-1 text-foreground">{qrStats.activeDispatches}</p>
+              </div>
+              <div className="p-2.5 bg-primary/10 rounded-lg text-primary">
+                <Route className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="rounded-xl border-y-0 border-r-0 border-l-4 border-l-primary ring-0 bg-gradient-to-br from-amber-500/10 to-orange-500/10 shadow-sm">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Completed Dispatches</p>
+                <p className="text-2xl font-bold mt-1 text-foreground">{qrStats.completedDispatches}</p>
+              </div>
+              <div className="p-2.5 bg-primary/10 rounded-lg text-primary">
+                <CheckCircle className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Charts row */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Trip trend area chart */}
-          <Card className="lg:col-span-2 rounded-xl ambient-shadow border-0">
+          <Card className="lg:col-span-2 rounded-xl ambient-shadow border-0 ring-0">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                 <TrendingUp className="h-4 w-4 text-primary" />
@@ -120,7 +237,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* Fleet status pie */}
-          <Card className="rounded-xl ambient-shadow border-0">
+          <Card className="rounded-xl ambient-shadow border-0 ring-0">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                 <Truck className="h-4 w-4 text-primary" />
@@ -165,7 +282,7 @@ export default function DashboardPage() {
         {/* Second charts row */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Fuel bar chart */}
-          <Card className="rounded-xl ambient-shadow border-0">
+          <Card className="rounded-xl ambient-shadow border-0 ring-0">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                 <Fuel className="h-4 w-4 text-primary" />
@@ -187,7 +304,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* Recent trips */}
-          <Card className="lg:col-span-2 rounded-xl ambient-shadow border-0">
+          <Card className="lg:col-span-2 rounded-xl ambient-shadow border-0 ring-0">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                 <MapPin className="h-4 w-4 text-primary" />
@@ -196,9 +313,9 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {recentTrips.map((trip) => (
+                {recentTripsList.map((trip, idx) => (
                   <div
-                    key={trip.id}
+                    key={trip.id + idx}
                     className="flex items-center justify-between py-2 border-b border-border last:border-0"
                   >
                     <div className="flex items-center gap-3 min-w-0">
@@ -226,7 +343,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Alerts */}
-        <Card className="rounded-xl ambient-shadow border-0">
+        <Card className="rounded-xl ambient-shadow border-0 ring-0">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-primary" />
@@ -235,7 +352,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {alerts.map((alert, idx) => (
+              {staticAlerts.map((alert, idx) => (
                 <div
                   key={idx}
                   className="flex items-center justify-between py-2 border-b border-border last:border-0"

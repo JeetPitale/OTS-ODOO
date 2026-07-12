@@ -13,6 +13,7 @@ import {
   Settings,
   Crown,
   LogOut,
+  QrCode,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 
@@ -21,6 +22,7 @@ const navItems = [
   { label: "Vehicle Registry", href: "/vehicles", icon: Truck },
   { label: "Drivers & Safety", href: "/drivers", icon: Users },
   { label: "Trip Dispatch", href: "/trips", icon: Route },
+  { label: "Smart Dispatch", href: "/smart-dispatch", icon: QrCode },
   { label: "Maintenance", href: "/maintenance", icon: Wrench },
   { label: "Fuel & Expenses", href: "/fuel", icon: Fuel },
   { label: "Reports & Analytics", href: "/reports", icon: BarChart3 },
@@ -55,6 +57,20 @@ export function Sidebar({ user }: SidebarProps) {
     .slice(0, 2)
     .toUpperCase() || "JD";
 
+  // RBAC filters for default sidebar links
+  const filteredNavItems = navItems.filter((item) => {
+    // Only Admin and Dispatch Operator can access Smart Dispatch
+    if (item.href === "/smart-dispatch") {
+      return user?.role === "ADMIN" || user?.role === "DISPATCH_OPERATOR";
+    }
+    // Only Admin and Fleet Manager can see these administrative modules
+    const adminOnlyModules = ["/dashboard", "/vehicles", "/drivers", "/trips", "/maintenance", "/fuel", "/reports", "/settings"];
+    if (adminOnlyModules.includes(item.href)) {
+      return user?.role === "ADMIN" || user?.role === "FLEET_MANAGER";
+    }
+    return true;
+  });
+
   return (
     <aside className="w-[260px] h-screen bg-white border-r border-border flex flex-col fixed left-0 top-0 z-30">
       {/* Brand */}
@@ -67,14 +83,14 @@ export function Sidebar({ user }: SidebarProps) {
             Road<span className="text-primary">Kings</span>
           </h1>
           <p className="text-[10px] text-muted-foreground font-medium tracking-widest uppercase">
-            Fleet Manager
+            {user?.role === "DISPATCH_OPERATOR" ? "Dispatch Center" : "Fleet Manager"}
           </p>
         </div>
       </div>
 
       {/* Nav */}
       <nav className="flex-1 py-4 px-3 space-y-0.5 overflow-y-auto">
-        {navItems.map((item) => {
+        {filteredNavItems.map((item) => {
           const isActive =
             pathname === item.href || pathname.startsWith(item.href + "/");
           return (

@@ -36,6 +36,18 @@ async function main() {
       passwordHash,
       role: Role.FINANCIAL_ANALYST,
     },
+    {
+      name: "System Admin",
+      email: "admin@roadkings.com",
+      passwordHash,
+      role: Role.ADMIN,
+    },
+    {
+      name: "Dispatch Operator",
+      email: "operator@roadkings.com",
+      passwordHash,
+      role: Role.DISPATCH_OPERATOR,
+    },
   ];
 
   for (const user of usersToCreate) {

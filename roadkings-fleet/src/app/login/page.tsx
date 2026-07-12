@@ -34,7 +34,22 @@ export default function LoginPage() {
         setError("Invalid email or password");
         setIsLoading(false);
       } else {
-        router.push("/dashboard");
+        try {
+          const userRes = await fetch("/api/auth/me");
+          const userData = await userRes.json();
+          if (userData?.user?.role === "DISPATCH_OPERATOR") {
+            router.push("/smart-dispatch");
+          } else {
+            router.push("/dashboard");
+          }
+        } catch {
+          // Fallback if API fails
+          if (email.includes("operator@roadkings.com") || email.includes("dispatcher@roadkings.com")) {
+            router.push("/smart-dispatch");
+          } else {
+            router.push("/dashboard");
+          }
+        }
         router.refresh();
       }
     } catch {
@@ -387,7 +402,7 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
-              <div className="stagger-3 p-3.5 rounded-xl bg-red-50 text-red-600 text-xs font-semibold border border-red-150 animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="stagger-3 p-3.5 rounded-xl bg-red-50 text-red-600 text-xs font-semibold border border-red-200 animate-in fade-in slide-in-from-top-1 duration-200">
                 {error}
               </div>
             )}

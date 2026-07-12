@@ -140,7 +140,7 @@ export default function SettingsPage() {
 
           {/* General */}
           <TabsContent value="general" className="space-y-4">
-            <Card className="rounded-xl ambient-shadow border-0">
+            <Card className="rounded-xl ambient-shadow border-0 ring-0">
               <CardHeader className="pb-4">
                 <CardTitle className="text-sm font-semibold">Organization Details</CardTitle>
               </CardHeader>
@@ -194,7 +194,7 @@ export default function SettingsPage() {
 
           {/* Users */}
           <TabsContent value="users" className="space-y-4">
-            <Card className="rounded-xl ambient-shadow border-0">
+            <Card className="rounded-xl ambient-shadow border-0 ring-0">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-semibold">User Management</CardTitle>
                 <div className="flex items-center gap-2">
@@ -230,7 +230,7 @@ export default function SettingsPage() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {roles.map((role) => (
-                <Card key={role.name} className="rounded-xl ambient-shadow border-0">
+                <Card key={role.name} className="rounded-xl ambient-shadow border-0 ring-0">
                   <CardContent className="p-5">
                     <div className="flex items-center gap-2 mb-3">
                       <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -269,7 +269,7 @@ export default function SettingsPage() {
 
           {/* Notifications */}
           <TabsContent value="notifications" className="space-y-4">
-            <Card className="rounded-xl ambient-shadow border-0">
+            <Card className="rounded-xl ambient-shadow border-0 ring-0">
               <CardHeader className="pb-4">
                 <CardTitle className="text-sm font-semibold">Notification Preferences</CardTitle>
               </CardHeader>

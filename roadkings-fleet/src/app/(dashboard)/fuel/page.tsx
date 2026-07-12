@@ -83,7 +83,7 @@ export default function FuelPage() {
 
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Card className="rounded-xl ambient-shadow border-0">
+          <Card className="rounded-xl ambient-shadow border-0 ring-0">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                 <BarChart3 className="h-4 w-4 text-primary" />
@@ -105,7 +105,7 @@ export default function FuelPage() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-xl ambient-shadow border-0">
+          <Card className="rounded-xl ambient-shadow border-0 ring-0">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                 <TrendingDown className="h-4 w-4 text-primary" />
@@ -127,7 +127,7 @@ export default function FuelPage() {
         </div>
 
         {/* Fuel transactions table */}
-        <Card className="rounded-xl ambient-shadow border-0">
+        <Card className="rounded-xl ambient-shadow border-0 ring-0">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-semibold">Fuel Transactions</CardTitle>
             <div className="flex items-center gap-2">
