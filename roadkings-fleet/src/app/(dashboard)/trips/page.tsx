@@ -48,7 +48,7 @@ export default function TripsPage() {
     .reduce((a, b) => a + b, 0);
 
   const totals = {
-    activeTrips: tripsList.filter((t) => t.status === "on_trip" || t.status === "on-trip").length,
+    activeTrips: tripsList.filter((t) => (t.status as any) === "on_trip").length,
     onTimeRate: "98.2%",
     totalDistance: `${distSum.toLocaleString()} km`,
     revenue: `₹${(revSum / 1000).toFixed(1)}K`,

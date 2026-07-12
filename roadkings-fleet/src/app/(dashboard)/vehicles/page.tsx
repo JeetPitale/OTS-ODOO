@@ -39,9 +39,9 @@ export default function VehiclesPage() {
 
   const totals = {
     total: vehiclesList.length,
-    onTrip: vehiclesList.filter((v) => v.status === "on_trip" || v.status === "on-trip").length,
-    available: vehiclesList.filter((v) => v.status === "available").length,
-    maintenance: vehiclesList.filter((v) => v.status === "in_maintenance" || v.status === "in-maintenance" || v.status === "in_shop" || v.status === "in-shop").length,
+    onTrip: vehiclesList.filter((v) => (v.status as any) === "on_trip" || (v.status as any) === "on-trip").length,
+    available: vehiclesList.filter((v) => (v.status as any) === "available").length,
+    maintenance: vehiclesList.filter((v) => (v.status as any) === "in_maintenance" || (v.status as any) === "in-maintenance" || (v.status as any) === "in_shop" || (v.status as any) === "in-shop").length,
   };
 
   const handleOpenAdd = () => {

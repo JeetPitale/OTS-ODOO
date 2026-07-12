@@ -66,7 +66,7 @@ export default function ActiveDispatchesPage() {
                             Trip: {disp.tripId}
                           </span>
                         </div>
-                        <StatusBadge variant="on-trip" />
+                        <StatusBadge variant={"on-trip" as any} />
                       </div>
 
                       <div className="space-y-2 border-y border-slate-200/60 py-3">

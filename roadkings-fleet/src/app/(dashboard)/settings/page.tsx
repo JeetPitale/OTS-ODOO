@@ -98,7 +98,7 @@ const userColumns: ColumnDef<User>[] = [
   {
     header: "Status",
     accessorKey: "status",
-    cell: (row) => <StatusBadge variant={row.status} />,
+    cell: (row) => <StatusBadge variant={row.status.replace("_", "-") as any} />,
   },
   { header: "Last Login", accessorKey: "lastLogin", sortable: true },
   {

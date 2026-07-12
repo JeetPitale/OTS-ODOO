@@ -51,7 +51,7 @@ export default function MaintenancePage() {
   });
 
   const pendingJobs = recordsList.filter((r) => r.status === "scheduled").length;
-  const inProgress = recordsList.filter((r) => r.status === "in_progress" || (r.status as any) === "in_maintenance" || (r.status as any) === "in-maintenance" || (r.status as any) === "in-shop").length;
+  const inProgress = recordsList.filter((r) => r.status === "in_maintenance").length;
   const completed = recordsList.filter((r) => r.status === "completed").length;
 
   // Calculate total cost dynamically

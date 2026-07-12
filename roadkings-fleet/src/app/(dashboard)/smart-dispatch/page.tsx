@@ -257,7 +257,7 @@ export default function SmartDispatchPage() {
     }
 
     // Rule 3: Already on trip
-    if (found.status === "on-trip") {
+    if (found.status === "on_trip") {
       errorsList.push("Driver is already dispatched on another active trip.");
     }
 
@@ -416,9 +416,9 @@ export default function SmartDispatchPage() {
     await completeDispatch.mutateAsync({
       id: completeDispatchId,
       data: {
-        finalOdometer: odometer,
-        fuelUsed: fuel,
-        completionNotes: notes,
+        odometer,
+        fuel,
+        notes,
       },
     });
     playBeep(880, 0.15);
@@ -433,7 +433,7 @@ export default function SmartDispatchPage() {
   };
 
   // Print Pass
-  const handlePrintPass = (record: DispatchRecord) => {
+  const handlePrintPass = (record: any) => {
     const qrCanvas = document.getElementById(`pass-qr-${record.dispatchId}`) as HTMLCanvasElement;
     const qrUrl = qrCanvas?.toDataURL("image/png") || "";
 
@@ -521,7 +521,7 @@ export default function SmartDispatchPage() {
   };
 
   // Download QR
-  const downloadDispatchQR = (record: DispatchRecord) => {
+  const downloadDispatchQR = (record: any) => {
     const canvas = document.getElementById(`pass-qr-${record.dispatchId}`) as HTMLCanvasElement;
     if (!canvas) return;
     const url = canvas.toDataURL("image/png");
@@ -1073,7 +1073,7 @@ export default function SmartDispatchPage() {
                     className="border border-input rounded-lg h-9 px-3 pr-8 text-xs outline-none bg-white min-w-[120px] appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22none%22%3E%3Cpath%20d%3D%22M7%209l3%203%203-3%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[position:right_8px_center] bg-[size:14px_14px] bg-no-repeat"
                   >
                     <option value="all">All Statuses</option>
-                    <option value="on-trip">Active Runs</option>
+                    <option value="on_trip">Active Runs</option>
                     <option value="completed">Completed</option>
                     <option value="cancelled">Cancelled</option>
                   </select>
@@ -1116,7 +1116,7 @@ export default function SmartDispatchPage() {
                             >
                               <FileText className="h-3 w-3" /> Challan
                             </Button>
-                            {item.tripStatus === "on-trip" && (
+                            {item.tripStatus === "on_trip" && (
                               <>
                                 <Button
                                   onClick={() => handleOpenComplete(item.dispatchId)}

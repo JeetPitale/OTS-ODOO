@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     const orderBy: Record<string, string> = {};
     if (sortBy) {
-      orderBy[sortBy] = sortOrder;
+      orderBy[sortBy] = sortOrder || "asc";
     } else {
       orderBy.createdAt = "desc";
     }

@@ -16,7 +16,7 @@ import {
   FileCode,
   Eye,
 } from "lucide-react";
-import { createDriverQRPayload } from "@/lib/storage";
+// Import removed
 import { useDrivers } from "@/hooks/useDrivers";
 import { useDispatches } from "@/hooks/useDispatches";
 import { useDriverQRs, useGenerateDriverQR } from "@/hooks/useQR";
@@ -269,7 +269,7 @@ export default function QrManagementPage() {
                       <div className="w-40 h-40 bg-white border border-slate-200 rounded-xl p-3 my-4 flex items-center justify-center relative">
                         <QRCodeCanvas
                           id={`driver-qr-${selectedDriver.id}`}
-                          value={driverQRs[selectedDriver.id] || createDriverQRPayload(selectedDriver)}
+                          value={driverQRs[selectedDriver.id] || JSON.stringify({ type: "DRIVER", driverId: selectedDriver.id, name: selectedDriver.name })}
                           size={136}
                           level="M"
                           includeMargin
@@ -356,7 +356,7 @@ export default function QrManagementPage() {
                             {new Date(disp.createdAt).toLocaleDateString()} <br /> {new Date(disp.createdAt).toLocaleTimeString()}
                           </td>
                           <td className="py-3.5">
-                            <StatusBadge variant={disp.tripStatus} />
+                            <StatusBadge variant={disp.tripStatus.replace("_", "-") as any} />
                           </td>
                           <td className="py-3.5 text-right">
                             <Button
